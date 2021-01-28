@@ -38,7 +38,7 @@ Qc2 = Expression("Qfun*exp ( -pow( x[1] -( x1-x2 )/2, 2 )/( 2*pow( x1-x2,2 ) ) )
 Ta = Expression("1-x[1]", degree=1)
 
 mu = exp(-Gamma * T)
-u_in = Constant(-1.5)
+u_in = Constant(-3.0)
 u_c = Constant(-1.0)
 
 # Note, x[0] is r and x[1] is x, and x[1] == 0 is the bottom.
@@ -65,7 +65,6 @@ colors.set_all(0)  # default to zero
 # We match the colours to the defined sketch in the Fenics chapter
 CompiledSubDomain("near(x[0], 0.0)").mark(colors, 5)
 CompiledSubDomain("near(x[1], 1.0) && x[0]<=0.5").mark(colors, 1)
-#CompiledSubDomain("near(x[1], 1.0) && x[0]>=0.5").mark(colors, 2)
 a1 = str(a)
 CompiledSubDomain("near( ( ("+a1+"-1) /0.5)*(x[0] - 1) +" + a1 + "- x[1], 0.0) && x[0]>=0.5").mark(colors, 2)
 CompiledSubDomain("near(x[0], 1.0)").mark(colors, 3)  # wall
@@ -107,9 +106,10 @@ a1 = (inner(sigma(usc, p), epsilon(vsc))) * x[0] * dx
 a2 = (- div_cyl(usc) * q1 - dot(f, vsc)) * x[0] * dx
 a3 = (dot(usc, grad(T)) * q2 + (1 / Pe) * inner(grad(q2), grad(T)) - Qc2*q2) * x[0] * dx
 b1 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(1)
-b3 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(3)
+b3 = - (1/asp)*dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(3)
 b4 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(4)
-b5 = - (1 / Pe) * (q2 * Qc * x[0] * ds(4) - Bi * q2 * T * x[0] * ds(3) + q2 * Bi * Ta * x[0] * ds(3)) - dot(grad(T), q2*n)*x[0]*ds(1)
+b5 = - (1 / Pe) * (q2 * Qc * x[0] * ds(4) - (1/asp)*Bi * q2 * T * x[0] * ds(3) + (1/asp)*q2 * Bi * Ta * x[0] * ds(3)) -\
+     dot(grad(T), q2*n)*x[0]*ds(1)
 #b5 = - (1 / Pe) * ( - Bi * q2 * T * x[0] * ds(3) + q2 * Bi * Ta * x[0] * ds(3))
 F = a1 + a2 + a3 + b1 + b3 + b4 + b5
 
@@ -130,26 +130,26 @@ for Gamma_val in [1, 5, 10, 15, 20, 23]:
 
 
 # Plot solutions
-File("Results/velocityCyl_uinm2p5.pvd") << u
-File("Results/pressureCyl_uinm2p5.pvd") << p
-File("Results/TemperatureCyl_uinm2p5.pvd") << T
+# File("Results/velocityCyl_uinm2p5.pvd") << u
+# File("Results/pressureCyl_uinm2p5.pvd") << p
+# File("Results/TemperatureCyl_uinm2p5.pvd") << T
 
 W2 = FunctionSpace(mesh, Q2)
 Pmu = project(mu, W2)
 
-File("Results/ViscosityCyl_uinm2p5.pvd") << Pmu
-#plot(u)
-#plt.show()
+# File("Results/ViscosityCyl_uinm2p5.pvd") << Pmu
+# plot(u)
+# plt.show()
 
-c = plot(p, title='pressure, uin = 2.5')
+c = plot(p, title='pressure')
 plt.colorbar(c)
 plt.show()
 
-c = plot(u, title='velocity, uin = 2.5')
+c = plot(u, title='velocity')
 plt.colorbar(c)
 plt.show()
 
-c = plot(T, title='Temperature, uin = 2.5')
+c = plot(T, title='Temperature')
 plt.colorbar(c)
 plt.show()
 

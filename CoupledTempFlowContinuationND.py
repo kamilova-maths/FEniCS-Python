@@ -57,11 +57,11 @@ Ta = Expression("1-x[1]", degree=1)
 
 mu = exp(-Gamma * T)
 
-u_in = Constant(-3.0)
+u_in = Constant(-1.5)
 u_c = Constant(-1.0)
 
 # Note, x[0] is r and x[1] is x, and x[1] == 0 is the bottom.
-inflow = 'near(x[1], 1.0) && x[0]<0.5'
+inflow = 'near(x[1], 1.0) && x[0]<=0.5'
 wall = 'near(x[0], 1.0)'
 centre = 'near(x[0], 0.0)'
 outflow = 'near(x[1], 0.0)'
@@ -84,7 +84,7 @@ colors.set_all(0)  # default to zero
 
 # We match the colours to the defined sketch in the Fenics chapter
 CompiledSubDomain("near(x[0], 0.0)").mark(colors, 5)
-CompiledSubDomain("near(x[1], 1.0) && x[0]<0.5").mark(colors, 1)
+CompiledSubDomain("near(x[1], 1.0) && x[0]<=0.5").mark(colors, 1)
 CompiledSubDomain("near(x[1], 1.0) && x[0]>=0.5").mark(colors, 2)
 CompiledSubDomain("near(x[0], 1.0)").mark(colors, 3)  # wall
 CompiledSubDomain("near(x[1], 0.0)").mark(colors, 4)  # outflow
@@ -96,12 +96,9 @@ ds = Measure("ds", subdomain_data=colors)
 I = Identity(2)
 F = (2 * mu * inner(epsilon, grad(vsc)) - div(usc) * q1 - div(vsc) * p - dot(f, vsc) + dot(usc, grad(T)) * q2 + (
        1 / Pe) * inner(grad(q2), grad(T)) - Qc2*q2) * dx \
-  - (1 / Pe) * (
-         q2 * Qc * ds(4) - Bi * q2 * T * ds(3) + q2 * Bi * Ta * ds(3)) \
-  - dot(dot(epsilon, vsc), n) * ds(1) + dot(dot(p * I, vsc), n) * ds(1) - dot(dot(epsilon, vsc), n) * ds(3) + dot(
-  dot(p * I, vsc), n) * ds(3) \
-  - dot(dot(epsilon, vsc), n) * ds(4) + dot(
-  dot(p * I, vsc), n) * ds(4)
+  - (1 / Pe) * (q2 * Qc * ds(4) - (1/asp)*Bi * q2 * T * ds(3) + (1/asp) * q2 * Bi * Ta * ds(3)) \
+  - dot(dot(epsilon, vsc), n) * ds(1) + dot(dot(p * I, vsc), n) * ds(1) - (1/asp) * dot(dot(epsilon, vsc), n) * ds(3) \
+    + (1/asp)*dot(dot(p * I, vsc), n) * ds(3) - dot(dot(epsilon, vsc), n) * ds(4) + dot(dot(p * I, vsc), n) * ds(4)
 
 for Gamma_val in [1, 5, 10, 15, 20, 23]:
 #for Gamma_val in [1, 5, 10]:
@@ -115,14 +112,14 @@ solve(F == 0, w, bcs)
 
 # Plot solutions
 (u, p, T) = w.split()
-File("Results/velocitySym_uinm3.pvd") << u
-File("Results/pressureSym_uinm3.pvd") << p
-File("Results/TemperatureSym_uinm3.pvd") << T
+#File("Results/velocitySym_uinm3.pvd") << u
+#File("Results/pressureSym_uinm3.pvd") << p
+#File("Results/TemperatureSym_uinm3.pvd") << T
 
 W2 = FunctionSpace(mesh, Q2)
 Pmu = project(mu, W2)
 
-File("Results/ViscositySym_uinm3.pvd") << Pmu
+#File("Results/ViscositySym_uinm3.pvd") << Pmu
 
 pQc2 = project(Qc2, W2)
 c = plot(pQc2)
