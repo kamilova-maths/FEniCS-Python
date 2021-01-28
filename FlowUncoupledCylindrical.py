@@ -1,5 +1,5 @@
 from dolfin import *
-
+import matplotlib.pyplot as plt
 # Define mesh and geometry - We solve for half of the domain we need, and impose symmetry
 mesh = RectangleMesh(Point(0, 0), Point(1, 1), 100, 100)
 n = FacetNormal(mesh)
@@ -19,7 +19,7 @@ w = Function(W)
 # mu = Constant(0.01)
 mu = Expression('exp(-a*pow(x[0],2))', degree=2, a=10)
 
-u_in = Constant(-2.0)
+u_in = Constant(-4.0)
 u_c = Constant(-1.0)
 L = 3.0
 R = 0.5
@@ -100,5 +100,14 @@ solve(F == 0, w, bcs)
 
 # Plot solutions
 (u, p) = w.split()
-File("StokesWithBC/velocityCyl.pvd") << u
-File("StokesWithBC/pressureCyl.pvd") << p
+
+c = plot(p, title='pressure')
+plt.colorbar(c)
+plt.show()
+
+c = plot(u, title='velocity')
+plt.colorbar(c)
+plt.show()
+
+File("Results/velocityCyl.pvd") << u
+File("Results/pressureCyl.pvd") << p

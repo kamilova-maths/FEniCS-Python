@@ -1,4 +1,0 @@
-/tmp/tmpdq9mu9i7/dolfin_subdomain_0e0455debd17116c8acc8b384e140b0e.cpp: In member function ‘virtual bool dolfin::dolfin_subdomain_0e0455debd17116c8acc8b384e140b0e::inside(Eigen::Ref<const Eigen::Matrix<double, -1, 1> >, bool) const’:
-/tmp/tmpdq9mu9i7/dolfin_subdomain_0e0455debd17116c8acc8b384e140b0e.cpp:63:43: error: lvalue required as left operand of assignment
-          return near(x[1], 1.0) && x[0]<0=.5;
-                                           ^~
