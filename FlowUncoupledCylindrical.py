@@ -1,7 +1,7 @@
 from dolfin import *
 import matplotlib.pyplot as plt
 # Define mesh and geometry - We solve for half of the domain we need, and impose symmetry
-mesh = RectangleMesh(Point(0, 0), Point(1, 1), 100, 100)
+mesh = RectangleMesh(Point(0, 0), Point(1, 2), 100, 100)
 n = FacetNormal(mesh)
 
 # Define Taylor--Hood function space W

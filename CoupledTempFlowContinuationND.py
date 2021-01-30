@@ -57,7 +57,7 @@ Ta = Expression("1-x[1]", degree=1)
 
 mu = exp(-Gamma * T)
 
-u_in = Constant(-1.5)
+u_in = Constant(-1.96)
 u_c = Constant(-1.0)
 
 # Note, x[0] is r and x[1] is x, and x[1] == 0 is the bottom.
@@ -112,9 +112,9 @@ solve(F == 0, w, bcs)
 
 # Plot solutions
 (u, p, T) = w.split()
-#File("Results/velocitySym_uinm3.pvd") << u
-#File("Results/pressureSym_uinm3.pvd") << p
-#File("Results/TemperatureSym_uinm3.pvd") << T
+File("Results/velocityCartesian.pvd") << u
+File("Results/pressureCartesian.pvd") << p
+File("Results/TemperatureCartesian.pvd") << T
 
 W2 = FunctionSpace(mesh, Q2)
 Pmu = project(mu, W2)

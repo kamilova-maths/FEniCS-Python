@@ -1,14 +1,15 @@
 from dolfin import *
 from mshr import *
 import matplotlib.pyplot as plt
+import numpy as np
 # Define mesh and geometry - We solve for half of the domain we need, and impose symmetry
 
 # This is a bit misleading, as we have a square domain, which is the rescaled version of a rectangular domain, so we are
 # solving on the rescaled domain, the rescaled equations. Then we plot the rescaled version of u and v
 a = Constant(1.0)
-domain = Polygon([Point(1, 0), Point(1, a), Point(0.5, 1), Point(0, 1), Point(0, 0)])
-mesh = generate_mesh(domain, 50)
-#mesh = RectangleMesh(Point(0, 0), Point(1, 1), 100, 100)
+#domain = Polygon([Point(1, 0), Point(1, a), Point(0.5, 1), Point(0, 1), Point(0, 0)])
+#mesh = generate_mesh(domain, 50)
+mesh = RectangleMesh(Point(0, 0), Point(1, 1), 100, 100)
 n = FacetNormal(mesh)
 
 # Define Taylor--Hood function space W
@@ -26,7 +27,7 @@ w = Function(W)
 # mu = Constant(0.01)
 mu = Expression('exp(-a*pow(x[0],2))', degree=2, a=10)
 
-u_in = Constant(-2.0)
+u_in = Constant(-np.pi)
 u_c = Constant(-1.0)
 L = 3.0
 R = 0.5

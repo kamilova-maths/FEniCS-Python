@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Define mesh and geometry
-#mesh = RectangleMesh(Point(0, 0), Point(1, 1), 60, 60)
+mesh = RectangleMesh(Point(0, 0), Point(1, 1), 60, 60)
 
 a = 1.0
-domain = Polygon([Point(1, 0), Point(1, a), Point(0.5, 1), Point(0, 1), Point(0, 0)])
-mesh = generate_mesh(domain, 50)
+#domain = Polygon([Point(1, 0), Point(1, a), Point(0.5, 1), Point(0, 1), Point(0, 0)])
+#mesh = generate_mesh(domain, 50)
 
 # Create mesh
 n = FacetNormal(mesh)
@@ -33,12 +33,12 @@ R = 0.5
 asp = R/L
 #Qc2 = Constant(0.0)
 #Qc2 = Expression("(1/(x1-x2))*(x[1]<x1)*(x[1]>x2)", degree=1,  x1=0.3, x2=0.1)
-Qc2 = Expression("Qfun*exp ( -pow( x[1] -( x1-x2 )/2, 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=0.0, x1=0.3, x2=0.1)
+Qc2 = Expression("Qfun*exp ( -pow( x[1] -( x1-x2 )/2, 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=0.5, x1=0.3, x2=0.1)
 
 Ta = Expression("1-x[1]", degree=1)
 
 mu = exp(-Gamma * T)
-u_in = Constant(-3.0)
+u_in = Constant(-2.5)
 u_c = Constant(-1.0)
 
 # Note, x[0] is r and x[1] is x, and x[1] == 0 is the bottom.
@@ -65,8 +65,9 @@ colors.set_all(0)  # default to zero
 # We match the colours to the defined sketch in the Fenics chapter
 CompiledSubDomain("near(x[0], 0.0)").mark(colors, 5)
 CompiledSubDomain("near(x[1], 1.0) && x[0]<=0.5").mark(colors, 1)
-a1 = str(a)
-CompiledSubDomain("near( ( ("+a1+"-1) /0.5)*(x[0] - 1) +" + a1 + "- x[1], 0.0) && x[0]>=0.5").mark(colors, 2)
+CompiledSubDomain("near(x[1], 1.0) && x[0]>=0.5").mark(colors, 2)
+# a1 = str(a)
+# CompiledSubDomain("near( ( ("+a1+"-1) /0.5)*(x[0] - 1) +" + a1 + "- x[1], 0.0) && x[0]>=0.5").mark(colors, 2)
 CompiledSubDomain("near(x[0], 1.0)").mark(colors, 3)  # wall
 CompiledSubDomain("near(x[1], 0.0)").mark(colors, 4)  # outflow
 
@@ -123,16 +124,19 @@ for Gamma_val in [1, 5, 10, 15, 20, 23]:
     (u, p, T) = w.split()
 
     # Extract flux
-    flux = dot(u, n) * dot(u, n) * ds(1)
-    total_flux_old = assemble(flux)
+    # flux = dot(u, n) * dot(u, n) * ds(1)
+    # total_flux_old = assemble(flux)
 
-    print("Total flux on boundary 2 is", total_flux_old)
+    # print("Total flux on boundary 2 is", total_flux_old)
 
+Qc2 = Expression("Qfun*exp ( -pow( x[1] -( x1-x2 )/2, 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=2.3710, x1=0.3,
+                 x2=0.1)
+solve(F == 0, w, bcs)
 
 # Plot solutions
-# File("Results/velocityCyl_uinm2p5.pvd") << u
-# File("Results/pressureCyl_uinm2p5.pvd") << p
-# File("Results/TemperatureCyl_uinm2p5.pvd") << T
+File("Results/velocityCyl.pvd") << u
+File("Results/pressureCyl.pvd") << p
+File("Results/TemperatureCyl.pvd") << T
 
 W2 = FunctionSpace(mesh, Q2)
 Pmu = project(mu, W2)
