@@ -10,7 +10,7 @@ import numpy as np
 # out how to do this in Python ...
 
 
-lo = 0
+lo = 0.5
 hi = 1
 tol = 0.0001
 count = 0
@@ -21,7 +21,7 @@ L = 5.0
 R = 0.5
 asp = R / L
 
-u_in = Constant(-1.5)
+u_in = Constant(-4.0)
 u_c = Constant(-1.0)
 
 
@@ -57,14 +57,14 @@ flux_array = []
 
 # while count < N or (hi-lo) < tol:
     # a = (lo + hi) / 2
-Na = 20
+Na = 200
 da = (hi-lo)/Na
 a_values = []
 for i in range(0, Na):
     print('a is ', a)
     a_values.append(a)
     domain = Polygon([Point(1, 0), Point(1, a), Point(0.5, 1), Point(0, 1), Point(0, 0)])
-    mesh = generate_mesh(domain, 50)
+    mesh = generate_mesh(domain, 100)
 
     # Create mesh
     n = FacetNormal(mesh)
@@ -99,9 +99,6 @@ for i in range(0, Na):
 
     colors = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
     colors.set_all(0)  # default to zero
-    colors = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
-    colors.set_all(0)  # default to zero
-
     # We match the colours to the defined sketch in the Fenics chapter
     CompiledSubDomain("near(x[0], 0.0)").mark(colors, 5)
     CompiledSubDomain("near(x[1], 1.0) && x[0]<=0.5").mark(colors, 1)
@@ -118,7 +115,7 @@ for i in range(0, Na):
     a1 = (inner(sigma(usc, p), epsilon(vsc))) * x[0] * dx
     a2 = (- div_cyl(usc) * q1 - dot(f, vsc)) * x[0] * dx
     b1 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(1)
-    b3 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(3)
+    b3 = - (1/asp) * dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(3)
     b4 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(4)
     F = a1 + a2 + b1 + b3 + b4
 
@@ -144,7 +141,8 @@ for i in range(0, Na):
 # W2 = FunctionSpace(mesh, Q2)
 # Pmu = project(mu, W2)
 #
-# c = plot(u, title='velocity, uin = 2.5')
+# File("Results/velocityIsothermal.pvd") << u
+# c = plot(u, title='Velocity Isothermal')
 # plt.colorbar(c)
 # plt.show()
 #
@@ -152,9 +150,12 @@ for i in range(0, Na):
 # plt.colorbar(c)
 # plt.show()
 
-fig = plt.figure()
-plt.plot(a_values, flux_array)
-plt.ylabel('Flux')
-plt.xlabel('a values')
-plt.title('Sweep over a values, straight line free surface estimation')
-plt.show()
+# fig = plt.figure()
+# plt.plot(a_values, flux_array)
+# plt.ylabel('Flux')
+# plt.xlabel('a values')
+# plt.title('Sweep over a values, straight line free surface estimation')
+# plt.show()
+
+values = np.asarray([a_values, flux_array])
+np.savetxt("Results/avsfluxisothermaluin4ref.csv", values.T, delimiter='\t')

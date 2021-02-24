@@ -16,22 +16,16 @@ tol = 0.0001
 count = 0
 N = 50
 a = 1
-Gamma = Constant(0.0)
-Pe = Constant(27.0)
-Bi = Constant(58.0)
-Qc = Constant(0.0)
+
 L = 5.0
 R = 0.5
 asp = R / L
 
-u_in = Constant(-1.5)
+u_in = Constant(-3.5)
 u_c = Constant(-1.0)
 
 
-Qc2 = Expression("Qfun*exp ( -pow( x[1] -( x1-x2 )/2, 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=2.3710, x1=0.3,
-                 x2=0.1)
 
-Ta = Expression("1-x[1]", degree=1)
 
 # symmetric gradient
 def epsilon(v):
@@ -59,19 +53,18 @@ def div_cyl(v):
 
 
 total_flux_old = 0.0
-flux_array1 = []
-flux_array2 = []
+flux_array = []
 
 # while count < N or (hi-lo) < tol:
     # a = (lo + hi) / 2
-Na = 5
+Na = 1
 da = (hi-lo)/Na
 a_values = []
 for i in range(0, Na):
     print('a is ', a)
     a_values.append(a)
     domain = Polygon([Point(1, 0), Point(1, a), Point(0.5, 1), Point(0, 1), Point(0, 0)])
-    mesh = generate_mesh(domain, 50)
+    mesh = generate_mesh(domain, 60)
 
     # Create mesh
     n = FacetNormal(mesh)
@@ -79,31 +72,33 @@ for i in range(0, Na):
     # Define Taylor--Hood function space W
     V = VectorElement("CG", triangle, 2)
     Q1 = FiniteElement("CG", triangle, 1)
-    Q2 = FiniteElement("CG", triangle, 1)
-    W = FunctionSpace(mesh, MixedElement([V, Q1, Q2]))
+    W = FunctionSpace(mesh, MixedElement([V, Q1]))
 
     # Define Function and TestFunction(s)
     w = Function(W)
-    (u, p, T) = split(w)
-    (v, q1, q2) = split(TestFunction(W))
+    (u, p) = split(w)
+    (v, q1) = split(TestFunction(W))
     # Define the viscosity and bcs
 
-    mu = exp(-Gamma * T)
+    mu = Constant(1.0)
 
     # Note, x[0] is r and x[1] is x, and x[1] == 0 is the bottom.
     inflow = 'near(x[1], 1.0) && x[0]<=0.5'
     wall = 'near(x[0], 1.0)'
     centre = 'near(x[0], 0.0)'
     outflow = 'near(x[1], 0.0)'
+    abnd = str(a)
+    # weird = 'near( ( ('+abnd+'-1) /0.5)*(x[0] - 1) +' + abnd + '- x[1], 0.0) && x[0]>=0.5'
     bcu_inflow = DirichletBC(W.sub(0), (0.0, u_in), inflow)
     bcu_wall = DirichletBC(W.sub(0), (0.0, u_c), wall)
     bcu_outflow = DirichletBC(W.sub(0), (0.0, u_c), outflow)
     bcu_symmetry = DirichletBC(W.sub(0).sub(0), Constant(0.0), centre)
-    bcT_inflow = DirichletBC(W.sub(2), 0.0, inflow)
-    bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcT_inflow, bcu_symmetry]
+    # bcu_slip = DirichletBC(W.sub(0).sub(1), Constant(0.0), weird)
+    bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcu_symmetry]
     # Define the variational form
     vsc = as_vector([v[0], asp*v[1]])
     usc = as_vector([u[0], asp*u[1]])
+    tang = as_vector([-n[1], n[0]])
     f = Constant((0, -1))
 
     colors = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
@@ -114,12 +109,11 @@ for i in range(0, Na):
     # We match the colours to the defined sketch in the Fenics chapter
     CompiledSubDomain("near(x[0], 0.0)").mark(colors, 5)
     CompiledSubDomain("near(x[1], 1.0) && x[0]<=0.5").mark(colors, 1)
-    abnd = str(a)
+
     CompiledSubDomain("near( ( ("+abnd+"-1) /0.5)*(x[0] - 1) +" + abnd + "- x[1], 0.0) && x[0]>=0.5").mark(colors, 2)
     CompiledSubDomain("near(x[0], 1.0)").mark(colors, 3)  # wall
     CompiledSubDomain("near(x[1], 0.0)").mark(colors, 4)  # outflow
-    #CompiledSubDomain("near( ( (" + abnd + "-1) /0.5)*(x[0] - 1) +" + abnd + "- x[1], 0.0) && x[0]>0.5").mark(colors,
-                                                                                                             #6)
+
     x = SpatialCoordinate(mesh)
 
     # Create the measure
@@ -127,57 +121,49 @@ for i in range(0, Na):
 
     a1 = (inner(sigma(usc, p), epsilon(vsc))) * x[0] * dx
     a2 = (- div_cyl(usc) * q1 - dot(f, vsc)) * x[0] * dx
-    a3 = (dot(usc, grad(T)) * q2 + (1 / Pe) * inner(grad(q2), grad(T)) - Qc2*q2) * x[0] * dx
     b1 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(1)
-    b3 = -(1/asp) * dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(3)
+    b2 = -dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(2)
+    b3 = - (1/asp) * dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(3)
     b4 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(4)
-    b5 = - (1 / Pe) * (q2 * Qc * x[0] * ds(4) - (1/asp) * Bi * q2 * T * x[0] * ds(3) + (1/asp) * q2 * Bi * Ta * x[0] * ds(3)) - dot(grad(T), q2*n)*x[0]*ds(1)
-    F = a1 + a2 + a3 + b1 + b3 + b4 + b5
+    F = a1 + a2 + b1 + b3 + b4 + b2
 
     solve(F == 0, w, bcs)
     # Extract solution
-    (u, p, T) = w.split()
+    (u, p) = w.split()
 
     # Extract flux
-    flux1 = dot(u, n) * dot(u, n) * ds(2)
-   # flux2 = dot(u, n) * dot(u, n) * ds(6)
-    total_flux_new1 = assemble(flux1)
-    #total_flux_new2 = assemble(flux2)
-    flux_array1.append(total_flux_new1)
-    #flux_array2.append(total_flux_new2)
-    print("Total flux on boundary 2 is", total_flux_new1)
+    #flux = dot(u, n) * dot(u, n) * ds(2)
+    #total_flux_new = assemble(flux)
+    #flux_array.append(total_flux_new)
 
-    #print("Total flux on boundary 6 is", total_flux_new2)
+    # print("Total flux on boundary 2 is", total_flux_new)
     # if total_flux_new < total_flux_old:
     #     hi = a
     # else:
     #     lo = a
     #
-    total_flux_old = total_flux_new1
+    # total_flux_old = total_flux_new
     count = count + 1
     a = a - da
 
 # W2 = FunctionSpace(mesh, Q2)
 # Pmu = project(mu, W2)
 #
-# c = plot(u, title='velocity, uin = 2.5')
-# plt.colorbar(c)
-# plt.show()
+File("Results/velocityIsothermalFreeSlip.pvd") << u
+c = plot(u, title='Velocity Isothermal')
+plt.colorbar(c)
+plt.show()
 #
 # c = plot(T, title='Temperature, uin = 2.5')
 # plt.colorbar(c)
 # plt.show()
 
-fig = plt.figure()
-plt.plot(a_values, flux_array1)
-plt.ylabel('Flux')
-plt.xlabel('a values')
-plt.title('Sweep over a values, straight line free surface estimation')
-plt.show()
-
 # fig = plt.figure()
-# plt.plot(a_values, flux_array2)
+# plt.plot(a_values, flux_array)
 # plt.ylabel('Flux')
 # plt.xlabel('a values')
 # plt.title('Sweep over a values, straight line free surface estimation')
 # plt.show()
+
+# values = np.asarray([a_values, flux_array])
+# np.savetxt("Results/avsfluxisothermaluin1p7.csv", values.T, delimiter='\t')

@@ -51,13 +51,14 @@ Qc = Constant(0.0)
 Qc2 = Expression("Qfun*exp ( -pow( x[1] -( x1-x2 )/2, 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=0.5, x1=0.3, x2=0.1)
 L = 5.0
 R = 0.5
-asp = R/L
+# asp = R/L
+asp = 1
 
 Ta = Expression("1-x[1]", degree=1)
 
 mu = exp(-Gamma * T)
 
-u_in = Constant(-1.96)
+u_in = Constant(-2.0)
 u_c = Constant(-1.0)
 
 # Note, x[0] is r and x[1] is x, and x[1] == 0 is the bottom.
@@ -70,7 +71,7 @@ bcu_wall = DirichletBC(W.sub(0), (0.0, u_c), wall)
 bcu_outflow = DirichletBC(W.sub(0), (0.0, u_c), outflow)
 bcu_symmetry = DirichletBC(W.sub(0).sub(0), Constant(0.0), centre)
 bcT_inflow = DirichletBC(W.sub(2), 0.0, inflow)
-bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcT_inflow, bcu_symmetry]
+bcs = [bcu_inflow, bcu_wall, bcT_inflow, bcu_symmetry, bcu_outflow]
 # Define the variational form
 vsc = as_vector([v[0], asp*v[1]])
 usc = as_vector([u[0], asp*u[1]])
@@ -100,7 +101,7 @@ F = (2 * mu * inner(epsilon, grad(vsc)) - div(usc) * q1 - div(vsc) * p - dot(f, 
   - dot(dot(epsilon, vsc), n) * ds(1) + dot(dot(p * I, vsc), n) * ds(1) - (1/asp) * dot(dot(epsilon, vsc), n) * ds(3) \
     + (1/asp)*dot(dot(p * I, vsc), n) * ds(3) - dot(dot(epsilon, vsc), n) * ds(4) + dot(dot(p * I, vsc), n) * ds(4)
 
-for Gamma_val in [1, 5, 10, 15, 20, 23]:
+for Gamma_val in [1, 5, 10, 15, 18, 19, 20, 23]:
 #for Gamma_val in [1, 5, 10]:
     Gamma.assign(Gamma_val)
     print('Gamma =', Gamma_val)
@@ -113,7 +114,7 @@ solve(F == 0, w, bcs)
 # Plot solutions
 (u, p, T) = w.split()
 File("Results/velocityCartesian.pvd") << u
-File("Results/pressureCartesian.pvd") << p
+#File("Results/pressureCartesian.pvd") << p
 File("Results/TemperatureCartesian.pvd") << T
 
 W2 = FunctionSpace(mesh, Q2)
