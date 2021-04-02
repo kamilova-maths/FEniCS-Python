@@ -17,10 +17,6 @@ count = 0
 N = 50
 a = 1
 
-L = 5.0
-R = 0.5
-asp = R / L
-
 u_in = Constant(-4.0)
 u_c = Constant(-1.0)
 
@@ -53,17 +49,18 @@ def div_cyl(v):
 
 
 total_flux_old = 0.0
+total_stress_old = 0.0
 flux_array = []
-
+stress_array = []
 # while count < N or (hi-lo) < tol:
     # a = (lo + hi) / 2
-Na = 200
+Na = 100
 da = (hi-lo)/Na
 a_values = []
 for i in range(0, Na):
     print('a is ', a)
     a_values.append(a)
-    domain = Polygon([Point(1, 0), Point(1, a), Point(0.5, 1), Point(0, 1), Point(0, 0)])
+    domain = Polygon([Point(0.2, 0), Point(0.2, a), Point(0.1, 1), Point(0, 1), Point(0, 0)])
     mesh = generate_mesh(domain, 100)
 
     # Create mesh
@@ -83,8 +80,8 @@ for i in range(0, Na):
     mu = Constant(1.0)
 
     # Note, x[0] is r and x[1] is x, and x[1] == 0 is the bottom.
-    inflow = 'near(x[1], 1.0) && x[0]<=0.5'
-    wall = 'near(x[0], 1.0)'
+    inflow = 'near(x[1], 1.0) && x[0]<=0.1'
+    wall = 'near(x[0], 0.2)'
     centre = 'near(x[0], 0.0)'
     outflow = 'near(x[1], 0.0)'
     bcu_inflow = DirichletBC(W.sub(0), (0.0, u_in), inflow)
@@ -93,18 +90,17 @@ for i in range(0, Na):
     bcu_symmetry = DirichletBC(W.sub(0).sub(0), Constant(0.0), centre)
     bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcu_symmetry]
     # Define the variational form
-    vsc = as_vector([v[0], asp*v[1]])
-    usc = as_vector([u[0], asp*u[1]])
+
     f = Constant((0, -1))
 
     colors = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
     colors.set_all(0)  # default to zero
     # We match the colours to the defined sketch in the Fenics chapter
     CompiledSubDomain("near(x[0], 0.0)").mark(colors, 5)
-    CompiledSubDomain("near(x[1], 1.0) && x[0]<=0.5").mark(colors, 1)
+    CompiledSubDomain("near(x[1], 1.0) && x[0]<=0.1").mark(colors, 1)
     abnd = str(a)
-    CompiledSubDomain("near( ( ("+abnd+"-1) /0.5)*(x[0] - 1) +" + abnd + "- x[1], 0.0) && x[0]>=0.5").mark(colors, 2)
-    CompiledSubDomain("near(x[0], 1.0)").mark(colors, 3)  # wall
+    CompiledSubDomain("near( ( ("+abnd+"-1) /0.1)*(x[0] - 0.2) +" + abnd + "- x[1], 0.0) && x[0]>=0.1").mark(colors, 2)
+    CompiledSubDomain("near(x[0], 0.2)").mark(colors, 3)  # wall
     CompiledSubDomain("near(x[1], 0.0)").mark(colors, 4)  # outflow
 
     x = SpatialCoordinate(mesh)
@@ -112,11 +108,11 @@ for i in range(0, Na):
     # Create the measure
     ds = Measure("ds", subdomain_data=colors)
 
-    a1 = (inner(sigma(usc, p), epsilon(vsc))) * x[0] * dx
-    a2 = (- div_cyl(usc) * q1 - dot(f, vsc)) * x[0] * dx
-    b1 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(1)
-    b3 = - (1/asp) * dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(3)
-    b4 = - dot(dot(sigmabc(usc, p), vsc), n) * x[0] * ds(4)
+    a1 = (inner(sigma(u, p), epsilon(v))) * x[0] * dx
+    a2 = (- div_cyl(u) * q1 - dot(f, v)) * x[0] * dx
+    b1 = - dot(dot(sigmabc(u, p), v), n) * x[0] * ds(1)
+    b3 = - dot(dot(sigmabc(u, p), v), n) * x[0] * ds(3)
+    b4 = - dot(dot(sigmabc(u, p), v), n) * x[0] * ds(4)
     F = a1 + a2 + b1 + b3 + b4
 
     solve(F == 0, w, bcs)
@@ -124,9 +120,16 @@ for i in range(0, Na):
     (u, p) = w.split()
 
     # Extract flux
-    flux = dot(u, n) * dot(u, n) * ds(2)
+    flux = dot(dot(grad(u), n), n)*x[0]*ds(2)
+    #flux = dot(u, n) * dot(u, n) * ds(2)
     total_flux_new = assemble(flux)
     flux_array.append(total_flux_new)
+
+    n3 = as_vector([n[0], n[1], 0])
+    stress = dot(dot(sigma(u, p), n3), n3) * x[0] * ds(2)
+    total_stress_new = assemble(stress)
+    stress_array.append(total_stress_new)
+    print("Total stress on boundary 2 is", total_stress_new)
 
     print("Total flux on boundary 2 is", total_flux_new)
     # if total_flux_new < total_flux_old:
@@ -134,6 +137,7 @@ for i in range(0, Na):
     # else:
     #     lo = a
     #
+    total_stress_old = total_stress_new
     total_flux_old = total_flux_new
     count = count + 1
     a = a - da
@@ -150,12 +154,19 @@ for i in range(0, Na):
 # plt.colorbar(c)
 # plt.show()
 
-# fig = plt.figure()
-# plt.plot(a_values, flux_array)
-# plt.ylabel('Flux')
+fig1 = plt.figure()
+plt.plot(a_values, flux_array)
+plt.ylabel('Flux')
+plt.xlabel('a values')
+plt.title('Sweep over a values, straight line free surface estimation')
+plt.show()
+
+# fig2 = plt.figure()
+# plt.plot(a_values, stress_array)
+# plt.ylabel('Stress')
 # plt.xlabel('a values')
 # plt.title('Sweep over a values, straight line free surface estimation')
 # plt.show()
-
-values = np.asarray([a_values, flux_array])
-np.savetxt("Results/avsfluxisothermaluin4ref.csv", values.T, delimiter='\t')
+#
+# values = np.asarray([a_values, flux_array])
+# np.savetxt("Results/avsfluxisothermaluin4ref.csv", values.T, delimiter='\t')

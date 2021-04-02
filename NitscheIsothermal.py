@@ -45,7 +45,8 @@ CompiledSubDomain("near(x[1], 0.0)").mark(colors, 4)  # outflow
 ds = Measure("ds", subdomain_data=colors)
 
 # Manufactured solution
-u_soln = Expression(("2*x[1]*(1.0 - x[0]*x[0])","-2*x[0]*(1.0 - x[1]*x[1])"),degree=4, domain=mesh)
+#u_soln = Expression(("2*x[1]*(1.0 - x[0]*x[0])","-2*x[0]*(1.0 - x[1]*x[1])"),degree=4, domain=mesh)
+u_soln = Constant((0.0, 0.0))
 p_soln = Constant(0.0)
 # Construct an initial guess with no singularity in eta(u)
 U = interpolate(Expression(("x[1]", "x[0]", "0.0"), degree=1), W)
@@ -93,7 +94,8 @@ f1 = Constant((0, -1))
 u, p = split(U)
 v, q = split(TestFunction(W))
 #f = -div(F_v(u_soln, grad(u_soln), p_soln))
-g_tau = 0*tangential_proj(F_v(u_soln, grad(u_soln), p_soln) * n, n)
+#g_tau = 0*tangential_proj(F_v(u_soln, grad(u_soln), p_soln) * n, n)
+g_tau = Constant(0.0)
 N = inner(F_v(u, grad(u)), grad(v)) * dx + div(u) * q * dx + dot(f1, v) * dx
 N +=  dot(dot(sigmabc(u, p), v), n) * ds(1)
 N +=  dot(dot(sigmabc(u, p), v), n) * ds(3)
