@@ -137,9 +137,9 @@ Pmu = project(mu, W2)
 
 File("Results/ViscosityCylQp1.pvd") << Pmu
 
-# c = plot(p, title='pressure')
-# plt.colorbar(c)
-# plt.show()
+c = plot(p, title='pressure')
+plt.colorbar(c)
+plt.show()
 #
 # c = plot(u, title='velocity')
 # plt.colorbar(c)

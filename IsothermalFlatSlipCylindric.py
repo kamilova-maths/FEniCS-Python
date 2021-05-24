@@ -85,7 +85,7 @@ CompiledSubDomain("near(x[1], 0.0)").mark(colors, 4)  # outflow
 x = SpatialCoordinate(mesh)
 
 # Create the measure
-ds = Measure("ds", subdomain_data=colors)
+ds = Measure("ds", domain=mesh, subdomain_data=colors)
 
 a1 = (inner(sigma(u, p), epsilon(v))) * x[0] * dx
 a2 = (- div_cyl(u) * q1 - dot(f, v)) * x[0] * dx

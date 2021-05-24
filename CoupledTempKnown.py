@@ -28,7 +28,7 @@ def mesh_ref(lx,ly, Nx,Ny):
 
 mesh = mesh_ref(0.2, 1.0, 30, 30)
 
-#mesh = refine(mesh)
+mesh = refine(mesh)
 
 
 n = FacetNormal(mesh)
@@ -36,26 +36,26 @@ n = FacetNormal(mesh)
 # Define Taylor--Hood function space W
 V = VectorElement("CG", triangle, 2)
 Q = FiniteElement("CG", triangle, 1)
-S = FiniteElement("CG", triangle, 1)
-W = FunctionSpace(mesh, MixedElement([V, Q, S]))
+#S = FiniteElement("CG", triangle, 1)
+W = FunctionSpace(mesh, MixedElement([V, Q]))
 
 # Define Function and TestFunction(s)
 w = Function(W)
-(u, p, T) = split(w)
-(v, q, s1) = split(TestFunction(W))
+(u, p) = split(w)
+(v, q) = split(TestFunction(W))
 
 # Define the viscosity and bcs
 # Qfun should be 2.3710
-Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=3, Qfun=2.3710, x1=0.3,
-                x2=0.1)
+#Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=3, Qfun=2.3710, x1=0.3,
+ #               x2=0.1)
 
-Ta = Expression("1-x[1]", degree=1)
+#Ta = Expression("1-x[1]", degree=1)
 
 Gamma = Constant(23.0)
 Pe = Constant(27.0)
 Bi = Constant(11.6)
-# Cartesian
-u_in = Constant(-4.0)
+# Cartesian - We must modify the inlet and outlet velocities so that they  match the rescaled values in EVV chapter
+u_in = Constant(-2.0)
 
 # Cylindric
 u_in_cyl = Constant(-4.0)
@@ -72,12 +72,11 @@ bcu_wall = DirichletBC(W.sub(0), (0.0, u_c), wall)
 bcu_outflow = DirichletBC(W.sub(0), (0.0, u_c), outflow)
 bcP_outflow = DirichletBC(W.sub(1), 0.0, outflow)
 bcu_symmetry = DirichletBC(W.sub(0).sub(0), Constant(0.0), centre)
-bcT_inflow = DirichletBC(W.sub(2), 0.0, inflow)
-bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcu_symmetry, bcT_inflow]
-bcs_cyl = [bcu_inflow_cyl, bcu_wall, bcu_outflow, bcu_symmetry, bcT_inflow]
+bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcu_symmetry]
+bcs_cyl = [bcu_inflow_cyl, bcu_wall, bcu_outflow, bcu_symmetry]
 x = SpatialCoordinate(mesh)
-
-
+T = Expression("x[0]*x[0]/(asp*asp)", asp=0.2, degree=2)
+Texp = "Quadratic"
 def mu(T_local=None):
     if T_local==None:
         T_local = T
@@ -142,22 +141,19 @@ CompiledSubDomain('near(x[0], 0.0)').mark(facet_f, 4)
 ds = Measure("ds", domain=mesh, subdomain_data=facet_f)
 
 # Cartesian
-a1 = inner(sigma(u, p), epsilon(v)) * dx() - dot(f, v) * dx()
-a = (inner(sigma(u, p), epsilon(v)) - div(u) * q + (dot(u, grad(T)) * s1 + (
-       1 / Pe) * inner(grad(s1), grad(T)))) * dx() - (1 / Pe) * (-Bi * s1 * T * ds(2)) - s1*dot(grad(T), n)*ds(0)
+# a1 = inner(sigma(u, p), epsilon(v)) * dx() - dot(f, v) * dx()
+a = (inner(sigma(u, p), epsilon(v)) - div(u) * q) * dx()
 b0 = - dot(dot(sigma2d(u, p), v), n) * ds(0)
 b2 = - dot(dot(sigma2d(u, p), v), n) * ds(2)
 b3 = -dot(dot(sigma2d(u, p), v), n) * ds(3)
 b4 = + dot(p*n, v) * ds(4)
 #b4 = -dot(dot(sigma2d(u, p), v), n) * ds(4)
 b = b0 + b2 + b3 + b4
-L = (- dot(f, v) - Qc2*s1) * dx() - (1/Pe) * (s1 * Bi * Ta * ds(2))
-
+L = (- dot(f, v)) * dx()
 F = a + L + b
 # Cylindric
-a_cyl = (inner(sigma_cyl(u, p), epsilon_cyl(v)) - div_cyl(u) * q + (dot(u, grad(T)) * s1 + (
-       1 / Pe) * inner(grad(s1), grad(T)))) * x[0] * dx() - (1 / Pe) * (-Bi * s1 * T * x[0] * ds(2))
-L_cyl = (- dot(f, v) - Qc2*s1) * x[0] * dx() - (1/Pe) * (s1 * Bi * Ta * x[0] * ds(2)) - s1*dot(grad(T), n)* x[0] * ds(0)
+a_cyl = (inner(sigma_cyl(u, p), epsilon_cyl(v)) - div_cyl(u) * q ) * x[0] * dx()
+L_cyl = (- dot(f, v) ) * x[0] * dx()
 b0_cyl = - dot(dot(sigma2d(u, p), v), n) * x[0] * ds(0)
 b2_cyl = - dot(dot(sigma2d(u, p), v), n) * x[0] * ds(2)
 b3_cyl = -dot(dot(sigma2d(u, p), v), n) * x[0] * ds(3)
@@ -169,6 +165,14 @@ F_cyl = a_cyl + L_cyl + b_cyl
 dw = TrialFunction(W)
 J = derivative(F, w, dw)
 J_cyl = derivative(F_cyl, w, dw)
+vtkfile_u = File("Results/velocityTemp" + Texp + ".pvd")
+
+vtkfile_p = File("Results/pressureTemp" + Texp + ".pvd")
+
+vtkfile_mu = File("Results/ViscosityTemp"+Texp+".pvd")
+#Y = (Gamma*(1-(x[0]/asp)))
+#u0 = (((uin - q) * (exp(2-(1-x[1])) - exp((1-x[1]))))/(exp(2)-1) + q)
+#du0dx = ((uin-q)*(-exp(2-(1-x[1]))-exp((1-x[1])))/(exp(2)-1))
 
 for Gamma_val in [10, 15, 20, 23]:
     Gamma.assign(Gamma_val)
@@ -182,99 +186,21 @@ for Gamma_val in [10, 15, 20, 23]:
 
     solver.solve()
     # Extract solution
-    (u, p, T) = w.split()
-#solver.summary()
+    (u, p) = w.split()
+    vtkfile_u << (u, Gamma_val)
+    vtkfile_p << (p, Gamma_val)
+    W2 = FunctionSpace(mesh, Q)
+    Pmu = project(mu(), W2)
+    vtkfile_mu << (Pmu, Gamma_val)
 
+    u_asymp = Expression(('-(x[0]/asp)*((uin-q)*(-exp(2-(1-x[1]))-exp((1-x[1])))/(exp(2)-1)) +'
+                          ' (1+2*(Gamma*(1-(x[0]/asp))))*exp(-2*(Gamma*(1-(x[0]/asp))))*((uin-q)*(-exp(2-(1-x[1]))-exp((1-x[1])))/(exp(2)-1))',
+                          'Gamma*4*exp(-2*(Gamma*(1-(x[0]/asp))))*(Gamma*(1-(x[0]/asp)))*(q-(((uin - q) * (exp(2-(1-x[1])) - exp((1-x[1]))))/(exp(2)-1) + q)) + '
+                          ' (((uin - q) * (exp(2-(1-x[1])) - exp((1-x[1]))))/(exp(2)-1) + q) + exp(-2*(Gamma*(1-(x[0]/asp))))*'
+                          '((q-(((uin - q) * (exp(2-(1-x[1])) - exp((1-x[1]))))/(exp(2)-1) + q))*(-10*(Gamma*(1-(x[0]/asp)))+'
+                          '4*(Gamma*(1-(x[0]/asp)))+4*(Gamma*(1-(x[0]/asp)))*(Gamma*(1-(x[0]/asp)))*(Gamma*(1-(x[0]/asp)))) +'
+                          ' (1-(((uin - q) * (exp(2-(1-x[1])) - exp((1-x[1]))))/(exp(2)-1) + q))*(1-2*(Gamma*(1-(x[0]/asp)))))'),
+                         Gamma=Gamma_val, q=1.0, uin=2.0, asp = 0.2, degree=5)
 
-# Vsig = TensorFunctionSpace(mesh, "DG", degree=1)
-# sig = Function(Vsig, name="Stress")
-# sig.assign(project(sigma2d(u, p), Vsig))
-# area0 = assemble(1.0*ds(0))
-# area1 = assemble(1.0 * ds(1))
-# area2 = assemble(1.0 * ds(2))
-# area3 = assemble(1.0 * ds(3))
-# area4 = assemble(1.0 * ds(4))
-# print("area at ds0 is", area0)
-# print("area at ds1 is", area1)
-# print("area at ds2 is", area2)
-# print("area at ds3 is", area3)
-# print("area at ds4 is", area4)
-# normal_stress0 = assemble(inner(sig*n, n)*ds(0))/area0
-# normal_stress1 = assemble(inner(sig * n, n) * ds(1))/area1
-# normal_stress2 = assemble(inner(sig * n, n) * ds(2))/area2
-# normal_stress3 = assemble(inner(sig * n, n) * ds(3))/area3
-# normal_stress4 = assemble(inner(sig * n, n) * ds(4))/area4
-# print("Stress at (0.1, 1):", sig(0.1, 1))
-# print("Normal stress at boundary 0", normal_stress0)
-# print("Normal stress at boundary 1", normal_stress1)
-# print("Normal stress at boundary 2", normal_stress2)
-# print("Normal stress at boundary 3", normal_stress3)
-# print("Normal stress at boundary 4", normal_stress4)
-#
-# sav = 0.0
-# if sav == 1.0:
-# # Saving data
-#     File("Results/velocityCoupledCylAdaptedMesh.pvd") << u
-#     File("Results/pressureCoupledCylAdaptedMesh.pvd") << p
-#     File("Results/TemperatureCoupledCylAdaptedMesh.pvd") << T
-#
-#     W2 = FunctionSpace(mesh, S)
-#     Pmu = project(mu(), W2)
-#
-#     File("Results/ViscosityCoupledCylAdaptedMesh.pvd") << Pmu
+# Let's see if we can actually plot the asymptotic prediction
 
-# Option 1
-f_int = assemble(a1)
-
-#bcu_inflow.apply(f_int)
-bcu_wall.apply(f_int)
-bcu_outflow.apply(f_int)
-bcu_symmetry.apply(f_int)
-
-x_dofs = W.sub(0).sub(0).dofmap().dofs()
-y_dofs = W.sub(0).sub(1).dofmap().dofs()
-Fx = 0
-for i in x_dofs:
-    Fx += f_int[i]
-
-Fy = 0
-for i in y_dofs:
-    Fy += f_int[i]
-
-print("Horizontal reaction force: %f" % (Fx))
-print("Vertical reaction force: %f" % (Fy))
-
-
-#Option 2
-# f_ext_unknown_tot = assemble(a1)
-#
-# f_ext_unknown_0 = assemble(b0)
-#
-# f_ext_unknown_2 = assemble(b2)
-#
-# f_ext_unknown_3 = assemble(b3)
-#
-# f_ext_unknown_4 = assemble(b4)
-#
-# Fy_tot = 0
-# Fy_0 = 0
-# Fy_2 = 0
-# Fy_3 = 0
-# Fy_4 = 0
-#
-# y_dofs = W.sub(0).sub(1).dofmap().dofs()
-#
-# for i in y_dofs:
-#     Fy_tot += f_ext_unknown_tot[i]
-#     Fy_0 += f_ext_unknown_0[i]
-#     Fy_2 += f_ext_unknown_2[i]
-#     Fy_3 += f_ext_unknown_3[i]
-#     Fy_4 += f_ext_unknown_4[i]
-#
-# print("Fy_tot is", Fy_tot)
-# print("Fy_0 is", Fy_0)
-# print("Fy_2 is", Fy_2)
-# print("Fy_3 is", Fy_3)
-# print("Fy_4 is", Fy_4)
-#
-# print("Sum between the four above is", Fy_0 + Fy_2 + Fy_3 + Fy_4)

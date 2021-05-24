@@ -68,7 +68,7 @@ f = Constant((0, -1))
 
 #domain = Polygon([Point(0.2, 0), Point(0.2, 1), Point(0.1, 1), Point(0, 1), Point(0, 0)])
 #mesh = generate_mesh(domain, 8)
-mesh_new = RectangleMesh(Point(0, 0), Point(0.2, 1), 100, 100)
+mesh_new = RectangleMesh(Point(0, 0), Point(0.2, 1), 4, 4)
 #mesh = Mesh('Meshes/CoupledRefinedMeshGamma5Cartesian.xml')
 
 
@@ -83,12 +83,16 @@ wall = 'near(x[0], 0.2)'
 centre = 'near(x[0], 0.0)'
 outflow = 'near(x[1], 0.0)'
 
-iterations = 1
-stress_values = []
+iterations = 6
+stress_values_0 = []
+stress_values_1 = []
+hvalues = []
 for i in range(iterations):
     print('Iteration = ', i)
     mesh = mesh_new
     n = FacetNormal(mesh)
+
+    hvalues.append(mesh.hmin())
 
     W = FunctionSpace(mesh, MixedElement([V, Q, S]))
 
@@ -168,43 +172,50 @@ for i in range(iterations):
         # Extract solution
         (u, p, T) = w.split()
     # This computes the INTEGRAL of the normal stress.
-    Vsig = TensorFunctionSpace(mesh, "DG", degree=2)
+    Vsig = TensorFunctionSpace(mesh, "DG", degree=0)
     sig = Function(Vsig, name="Stress")
     sig.assign(project(sigma(u, p), Vsig))
     area1 = assemble(1.0 * ds(1))
     normal_stress1 = assemble(inner(sig * n, n) * ds(1)) / area1
-    stress_values.append(normal_stress1)
+    stress_values_1.append(normal_stress1)
+
+    area1 = assemble(1.0 * ds(0))
+    normal_stress0 = assemble(inner(sig * n, n) * ds(0)) / area1
+    stress_values_0.append(normal_stress0)
     mesh_old = mesh
     mesh_new = refine(mesh_old)
-print("The normal stress at boundary 1 as mesh is refined is given by", stress_values)
-total_normal_stress = assemble(inner(sig * n, n) * ds)
 
-# Compute stress tensor
-sigma2 = 2 * mu() * grad(u) - p*Identity(len(u))
+values = np.asarray([hvalues, stress_values_0, stress_values_1])
+np.savetxt("Results/NormalStressTopCartesianTH.csv", values.T, delimiter='\t')
 
-# Compute surface traction
-T = -sigma2*n
+File("Results/NormalStressCartesianTH.pvd") << sig
 
-# Compute normal and tangential components
-Tn = inner(T,n) # scalar valued
-Tt = T - Tn*n # vector valued
-
-# Piecewise constant test functions
-scalar = FunctionSpace(mesh, "DG", 2)
-vector = VectorFunctionSpace(mesh, "DG", 0)
-v1 = TestFunction(scalar)
-w1 = TestFunction(vector)
-
-# Assemble piecewise constant functions for stress
-normal_stress = Function(scalar)
-shear_stress = Function(vector)
-
-Ln = (1 / FacetArea(mesh))*v1*Tn*ds
-Lt = (1 / FacetArea(mesh))*inner(w1, Tt)*ds
-assemble(Ln, tensor=normal_stress.vector())
-assemble(Lt, tensor=shear_stress.vector())
-File("Results/NormalStressCartesianCase1.pvd") << normal_stress
-
+# # Compute stress tensor
+# sigma2 = 2 * mu() * grad(u) - p*Identity(len(u))
+#
+# # Compute surface traction
+# T = -sigma2*n
+#
+# # Compute normal and tangential components
+# Tn = inner(T,n) # scalar valued
+# Tt = T - Tn*n # vector valued
+#
+# # Piecewise constant test functions
+# scalar = FunctionSpace(mesh, "DG", 2)
+# vector = VectorFunctionSpace(mesh, "DG", 0)
+# v1 = TestFunction(scalar)
+# w1 = TestFunction(vector)
+#
+# # Assemble piecewise constant functions for stress
+# normal_stress = Function(scalar)
+# shear_stress = Function(vector)
+#
+# Ln = (1 / FacetArea(mesh))*v1*Tn*ds
+# Lt = (1 / FacetArea(mesh))*inner(w1, Tt)*ds
+# assemble(Ln, tensor=normal_stress.vector())
+# assemble(Lt, tensor=shear_stress.vector())
+# File("Results/NormalStressCartesianCase1.pvd") << normal_stress
+#
 
 # area0 = assemble(1.0*ds(0))
 # area1 = assemble(1.0 * ds(1))

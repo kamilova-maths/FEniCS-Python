@@ -13,47 +13,43 @@ def sigma(v, p):
 
 
 # Initial coarse mesh
-mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 10, 10, "crossed")
+mesh = RectangleMesh(Point(0, 0), Point(1.0, 1.0), 4, 4, "crossed")
 
-# We plot the mesh to remind ourselves if it is crossed or uncrossed
-plot(mesh)
-plt.show()
-
-# We define the expressions for the manufactured solution
 # Manufactured solution NUMBER 1
+
+x = SpatialCoordinate(mesh)
+# Manufactured solution NUMBER 2
 u_solns_ex = ['-sin(2*pi*x[1])', 'sin(2*pi*x[0])', '0.0']
+#u_solns_ex = ['0.0', '-4*(x[0]+1)*(1-x[0])', '0.0']
+#p_solns_ex = ['7*x[1]']
 p_solns_ex = ['-cos(2*pi*x[0])*cos(2*pi*x[1])']
 
 
-# Manufactured solution NUMBER 2 - this solution does not work because I have not changed f accordingly
-# u_solns_ex = ['sin(x[0])*(a*sin(a*x[1]) - cos(a)*sinh(x[1]))', 'cos(x[0])*(a*cos(a*x[1]) + cos(a)*cosh(x[1]))', '0.0']
-# p_solns_ex = ['(1+a*a)*cos(a)*cos(x[0])*sinh(x[1])']
-
 mu = Constant(1.0) # constant viscosity
 
-# We define the boundaries
-inflow = 'near(x[1], 1.0) && x[0]<=0.1'
-right = 'near(x[1], 1.0) && x[0]>=0.1'
-wall = 'near(x[0], 0.2)'
+inflow = 'near(x[1], 1.0) && x[0]<=0.5'
+right = 'near(x[1], 1.0) && x[0]>=0.5'
+wall = 'near(x[0], 1.0)'
 centre = 'near(x[0], 0.0)'
 outflow = 'near(x[1], 0.0)'
 
 # initialise variables
 hvalues = []
-errors_u_max = []
-errors_p_max = []
-
 errors_u = []
 errors_p = []
-iterations = 5 # total number of iterations
+iterations = 6 # total number of iterations
 mesh_type = "crossed"
 #mesh_type = "uncrossed"
+vtkfile_u = File("Results/IsothermalManufacturedVelocitySquare" + mesh_type + ".pvd")
 
+vtkfile_p = File("Results/IsothermalManufacturedPressureSquare" + mesh_type + ".pvd")
+
+vtkfile_sig = File("Results/IsothermalManufacturedStressSquare" + mesh_type + ".pvd")
 
 for i in range(iterations):
 
     n = FacetNormal(mesh)
-    # We store the minimum cell size in each iteration for convergence comparison
+
     hvalues.append(mesh.hmin())
 
     # Define Taylor--Hood function space W
@@ -69,28 +65,30 @@ for i in range(iterations):
     # Manufactured solution of the easy case
     u_ex = Expression((u_solns_ex[0], u_solns_ex[1]), element=V, domain=mesh)
     p_ex = Expression(p_solns_ex[0], element=Q, domain=mesh)
-
+    g_ex = Expression(u_solns_ex[2], element=Q, domain=mesh)
     f_ex0 = Expression('2*pi*(cos(2*pi*x[1])*sin(2*pi*x[0]) - 2*pi*sin(2*pi*x[1]) )', degree=2)
     f_ex1 = Expression('2*pi*(2*pi*sin(2*pi*x[0]) + cos(2*pi*x[0])*sin(2*pi*x[1])) ', degree=2)
 
+    right_ex = Expression('cos(2*pi*x[0])', element=Q, domain=mesh)
+    #f_ex = Constant((0, -1))
     f_ex = as_vector([f_ex0, f_ex1])
-
     bcu_inflow = DirichletBC(W.sub(0), u_ex, inflow)
     bcu_wall = DirichletBC(W.sub(0), u_ex, wall)
     bcu_outflow = DirichletBC(W.sub(0), u_ex, outflow)
+    #bcu_centre = DirichletBC(W.sub(0).sub(0), Constant(0.0), centre) # this is a SYMMETRY condition, we also need to set u[1].dx(0) == 0
     bcu_centre = DirichletBC(W.sub(0), u_ex, centre)
     bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcu_centre]
 
     facet_f = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)  # FACET function
-    CompiledSubDomain('near(x[1], 1.0) && x[0]<=0.1').mark(facet_f, 0)
-    CompiledSubDomain('near(x[1], 1.0) && x[0]>=0.1').mark(facet_f, 1)
-    CompiledSubDomain('near(x[0], 0.2)').mark(facet_f, 2)  # wall
+    CompiledSubDomain('near(x[1], 1.0) && x[0]<=0.5').mark(facet_f, 0)
+    CompiledSubDomain('near(x[1], 1.0) && x[0]>=0.5').mark(facet_f, 1)
+    CompiledSubDomain('near(x[0], 1.0)').mark(facet_f, 2)  # wall
     CompiledSubDomain('near(x[1], 0.0)').mark(facet_f, 3)  # outflow
     CompiledSubDomain('near(x[0], 0.0)').mark(facet_f, 4)
 
     ds = Measure("ds", domain=mesh, subdomain_data=facet_f)
     a1 = (inner(sigma(u, p), epsilon(v))) * dx
-    a2 = (- div(u) * q ) * dx
+    a2 = (- div(u) * q + g_ex * q ) * dx
     a3 = (- dot(f_ex, v)) * dx
     b1 = - dot(dot(sigma(u, p), n), v) * ds(0) - dot(dot(sigma(u, p), n), v) * ds(2) - dot(dot(sigma(u, p), n),
                                                                                                v) * ds(3) \
@@ -99,58 +97,39 @@ for i in range(iterations):
     # Solve problem
     solve(F == 0, w, bcs)
     (u, p) = w.split()
-
-    # Save the results in separate .pvd files for analysis and safekeeping
-    File("Results/IsothermalManufacturedVelocity" + mesh_type + str(i) + ".pvd") << u
-    File("Results/IsothermalManufacturedPressure" + mesh_type + str(i) + ".pvd") << p
-
-    # We redefine the exact solution at a higher degree of accuracy to obtain a better estimate for the error
-    u_ex_fine = Expression((u_solns_ex[0], u_solns_ex[1]), degree=10)
-    p_ex_fine = Expression(p_solns_ex[0], degree=10)
-
-    vertex_values_u_ex = u_ex_fine.compute_vertex_values(mesh)
+    vtkfile_u << (u, i)
+    vtkfile_p << (p, i)
+    vertex_values_u_ex = u_ex.compute_vertex_values(mesh)
     vertex_values_u = u.compute_vertex_values(mesh)
 
-    vertex_values_p_ex = p_ex_fine.compute_vertex_values(mesh)
+    vertex_values_p_ex = p_ex.compute_vertex_values(mesh)
     vertex_values_p = p.compute_vertex_values(mesh)
 
     import numpy as np
-
-    errors_u_max.append(np.max(np.abs(vertex_values_u_ex - vertex_values_u)))
-    errors_p_max.append(np.max(np.abs(vertex_values_p_ex - vertex_values_p)))
-    errors_u.append(errornorm(u_ex, u, 'L2'))
-    errors_p.append(errornorm(p_ex, p, 'L2'))
+    errors_u.append(np.max(np.abs(vertex_values_u_ex - vertex_values_u)))
+    errors_p.append(np.max(np.abs(vertex_values_p_ex - vertex_values_p)))
+    #errors_u.append(errornorm(u_ex, u))
+    #errors_p.append(errornorm(p_ex, p))
     # M_u = inner((u_ex - u), (u_ex - u)) * dx
     # M_p = (p_ex - p)*(p_ex - p) * dx
     # errors_u.append(assemble(M_u))
     # errors_p.append(assemble(M_p))
-    # We compute the numerical stress expression
     Vsig = TensorFunctionSpace(mesh, "DG", degree=0)
     sig_num = Function(Vsig, name="Stress Numeric")
     sig_num.assign(project(sigma(u, p), Vsig))
-    File("Results/IsothermalManufacturedStress" + mesh_type + str(i) + ".pvd") << sig_num
+    vtkfile_sig << (sig_num, i)
     mesh = refine(mesh)
+    #n = (i+1)*4
+    #mesh = RectangleMesh(Point(0, 0), Point(1.0, 1.0), n, n)
     x = SpatialCoordinate(mesh)
 
-# We print out the errors for quick inspection
+
 
 print('The u errors are', errors_u)
 print('The p errors are', errors_p)
 values = np.asarray([hvalues, errors_u, errors_p])
-np.savetxt("Results/L2ErrorsIsothermalManufactured" + mesh_type + ".csv", values.T, delimiter='\t')
-print('The maximum u errors are', errors_u_max)
-print('The maximum p errors are', errors_p_max)
+np.savetxt("Results/ErrorsIsothermalManufacturedSquare" + mesh_type + ".csv", values.T, delimiter='\t')
 
-values = np.asarray([hvalues, errors_u_max, errors_p_max])
-np.savetxt("Results/MaxErrorsIsothermalManufactured" + mesh_type + ".csv", values.T, delimiter='\t')
-
-# Extracting the analytic expressions for u_ex and p_ex by projecting onto the appropriate space
-W2 = FunctionSpace(mesh, V)
-u_ex_proj = project(u_ex, W2)
-
-W2 = FunctionSpace(mesh, Q)
-p_ex_proj = project(p_ex, W2)
-
-File("Results/IsothermalManufacturedVelocity" + mesh_type + "Ana" + ".pvd") << u_ex_proj
-File("Results/IsothermalManufacturedPressure" + mesh_type + "Ana" + ".pvd") << p_ex_proj
-
+sig_ex = Function(Vsig, name="Stress Analytic")
+sig_ex.assign(project(sigma(u_ex, p_ex), Vsig))
+vtkfile_sig << (sig_ex, i+1)

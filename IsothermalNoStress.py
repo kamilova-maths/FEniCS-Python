@@ -5,7 +5,7 @@ import numpy as np
 # Define mesh and geometry - We solve for half of the domain we need, and impose symmetry
 #domain = Polygon([Point(1, 0), Point(1, 0.5), Point(0.5, 1), Point(0, 1), Point(0, 0)])
 #mesh = generate_mesh(domain, 100)
-mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 50, 50)
+mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 100, 100, "crossed")
 #mesh = Mesh('Meshes/IsothermalRefinedMesh.xml')
 n = FacetNormal(mesh)
 
@@ -55,46 +55,32 @@ right = 'near(x[1], 1.0) && x[0]>=0.1'
 wall = 'near(x[0], 0.2)'
 centre = 'near(x[0], 0.0)'
 outflow = 'near(x[1], 0.0)'
+pinpoint = 'near(x[1], 1.0) && near(x[0], 0.1)'
+bcp_pinpoint = DirichletBC(W.sub(1), Constant(0.0), pinpoint, "pointwise")
 bcu_inflow = DirichletBC(W.sub(0), (0.0, u_in), inflow)
 bcu_wall = DirichletBC(W.sub(0), (0.0, u_c), wall)
 bcu_outflow = DirichletBC(W.sub(0), (0.0, u_c), outflow)
 #bcP_bottom = DirichletBC(W.sub(1), 0.0, outflow)
 #bcP_right = DirichletBC(W.sub(1), 0.0, right)
 bcu_symmetry = DirichletBC(W.sub(0).sub(0), Constant(0.0), centre)
-bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcP_right, bcu_symmetry]
+bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcu_symmetry]
 # Define stress tensor
 # epsilon = sym(grad(u))
 x = SpatialCoordinate(mesh)
 
 
 def epsilon(v):
-    return sym(as_tensor([[v[0].dx(0), v[0].dx(1), 0],
-                          [v[1].dx(0), v[1].dx(1), 0],
-                          [0, 0, 0]]))
-
-
-# stress tensor
-def sigma(v, p):
-    return 2*mu*epsilon(v)-Id(p)
-
-
-def Id(p):
-    return as_tensor([[p, 0, 0],
-                      [0, p, 0],
-                     [0, 0, p]])
-
-
-def cond(v):
     return sym(as_tensor([[v[0].dx(0), v[0].dx(1)],
                           [v[1].dx(0), v[1].dx(1)]]))
 
 
-def sigmabc(v, p):
-    return 2*mu*cond(v) - p*Identity(2)
+# stress tensor
+def sigma(v, p):
+    return 2*mu*epsilon(v)-p*Identity(2)
 
 
 # Define the variational form
-f = Constant((0, -10))
+f = Constant((0, -1))
 # The vectors defined in Fenics are automatically dimensional. We introduce the aspect ratio here, turning the dimensional
 # v and u into the non-dimensional ones vsc and usc, noting that usc[0] = (1/asp)*u[0] (or equivalently, we multiply the
 # second component by asp.
@@ -160,10 +146,7 @@ ds = Measure("ds", domain=mesh, subdomain_data=facet_f)
 #dS = Measure("dS", domain=mesh, subdomain_data=subdomains)
 a1 = (inner(sigma(u, p), epsilon(v))) * dx
 a2 = (- div(u) * q - dot(f, v)) * dx
-b1 = dot(p*n, v)*ds(0) - dot(mu*dot(nabla_grad(u), n), v)*ds(0) + dot(p*n, v)*ds(2) - dot(mu*dot(nabla_grad(u), n), v)*ds(2) + \
-      dot(p*n, v)*ds(3) - dot(mu*dot(nabla_grad(u), n), v)*ds(3) + dot(p*n, v)*ds(4) - dot(mu*dot(nabla_grad(u), n), v)*ds(4)
-#b1 = - dot(dot(sigmabc(u, p), n), v)*ds(0) - dot(dot(sigmabc(u, p), n), v)*ds(2) - dot(dot(sigmabc(u, p), n), v)*ds(3) \
-     #- dot(dot(sigmabc(u, p), n), v)*ds(4)
+b1 = - dot(dot(sigma(u, p), n), v)*ds(0) - dot(dot(sigma(u, p), n), v)*ds(2) - dot(dot(sigma(u, p), n), v)*ds(3)
 # For the boundary terms, note that ds(3) is the only one here that varies along x[1], which is where the asp rescaling
 # is. Therefore we have to multiply only that term by (1/asp), or equivalently, multiply the other terms by asp.
 # b0 = - dot(dot(sigmabc(u, p), v), n) * ds(0)
@@ -176,39 +159,54 @@ solve(F == 0, w, bcs)
 # Plot solutions
 (u, p) = w.split()
 
+x0val_right = np.linspace(0.1, 0.2, 100)
+x0val_left = x0val_right - 0.1
+pds0 = []
+pds1 = []
+
+for i in range(len(x0val_right)):
+    pds0.append(p(x0val_left[i], 1.0))
+    pds1.append(p(x0val_right[i], 1.0))
+
+values = np.asarray([x0val_left, pds0, x0val_right, pds1])
+np.savetxt("Results/IsothermalZeroStressPTop.csv", values.T, delimiter='\t')
+
 # Compute stress tensor
-sigma = 2 * mu * grad(u) - p*Identity(len(u))
-
-# Compute surface traction
-T = -sigma*n
-
-# Compute normal and tangential components
-Tn = inner(T,n) # scalar valued
-Tt = T - Tn*n # vector valued
-
-# Piecewise constant test functions
-scalar = FunctionSpace(mesh, "DG", 0)
-vector = VectorFunctionSpace(mesh, "DG", 0)
-v1 = TestFunction(scalar)
-w1 = TestFunction(vector)
-
-# Assemble piecewise constant functions for stress
-normal_stress = Function(scalar)
-shear_stress = Function(vector)
-
-Ln = (1 / FacetArea(mesh))*v1*Tn*ds
-Lt = (1 / FacetArea(mesh))*inner(w1, Tt)*ds
-assemble(Ln, tensor=normal_stress.vector())
-assemble(Lt, tensor=shear_stress.vector())
-
-File("Results/NormalStressIsothermalNoStress.pvd") << normal_stress
-# c = plot(normal_stress, title='stress?')
-# plt.colorbar(c)
-# plt.show()
+# sigma = 2 * mu * grad(u) - p*Identity(len(u))
+#
+# # Compute surface traction
+# T = -sigma*n
+#
+# # Compute normal and tangential components
+# Tn = inner(T,n) # scalar valued
+# Tt = T - Tn*n # vector valued
+#
+# # Piecewise constant test functions
+# scalar = FunctionSpace(mesh, "DG", 0)
+# vector = VectorFunctionSpace(mesh, "DG", 0)
+# v1 = TestFunction(scalar)
+# w1 = TestFunction(vector)
+#
+# # Assemble piecewise constant functions for stress
+# normal_stress = Function(scalar)
+# shear_stress = Function(vector)
+#
+# Ln = (1 / FacetArea(mesh))*v1*Tn*ds
+# Lt = (1 / FacetArea(mesh))*inner(w1, Tt)*ds
+# assemble(Ln, tensor=normal_stress.vector())
+# assemble(Lt, tensor=shear_stress.vector())
+#
+# File("Results/NormalStressIsothermalNoStress.pvd") << normal_stress
+# # c = plot(normal_stress, title='stress?')
+# # plt.colorbar(c)
+# # plt.show()
 
 Vsig = TensorFunctionSpace(mesh, "DG", degree=0)
 sig = Function(Vsig, name="Stress")
-sig.assign(project(sigmabc(u, p), Vsig))
+sig.assign(project(sigma(u, p), Vsig))
+
+File("Results/IsothermalNormalStressTest.pvd") << sig
+
 area0 = assemble(1.0*ds(0))
 area1 = assemble(1.0 * ds(1))
 area2 = assemble(1.0 * ds(2))

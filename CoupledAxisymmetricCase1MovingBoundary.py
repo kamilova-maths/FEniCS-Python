@@ -84,7 +84,7 @@ wall = 'near(x[0], 0.2)'
 centre = 'near(x[0], 0.0)'
 outflow = 'near(x[1], 0.0)'
 
-Xvalues = [0, 0.1, 0.2, 0.3, -0.1, -0.2, -0.3]
+Xvalues = [-0.3, -0.2, -0.1, 0.0, 0.1, 0.2]
 x_1 = 0.3
 x_2 = 0.1
 x_min = 0
@@ -96,7 +96,13 @@ Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,
                  x2=0.1)
 
 vel_flux_values = []
+normal_stress_values_ds0 = []
+normal_stress_values_ds1 = []
+normal_stress_values_ds3 = []
+# coord = "Car"
+coord = "Cyl"
 for i in range(len(Xvalues)):
+    print('X value = ', Xvalues[i])
     n = FacetNormal(mesh)
 
     W = FunctionSpace(mesh, MixedElement([V, Q, S]))
@@ -143,52 +149,84 @@ for i in range(len(Xvalues)):
     b0 = - dot(dot(sigma2d(u, p), v), n) * ds(0) - s1*dot(grad(T), n)*ds(0)
     b2 = - dot(dot(sigma2d(u, p), v), n) * ds(2)
     b3 = -dot(dot(sigma2d(u, p), v), n) * ds(3)
-    b4 = + dot(p*n, v) * x[0] * ds(4)
+    b4 = + dot(p*n, v) * ds(4)
     L = (- dot(f, v) - Qc2*s1) * dx() - (1/Pe) * (s1 * Bi * Ta * ds(2))
-
+    F = a + L + b0 + b2 + b3 + b4
 
     # Cylindric
     a_cyl = (inner(sigma_cyl(u, p), epsilon_cyl(v)) - div_cyl(u) * q + (dot(u, grad(T)) * s1 + (
            1 / Pe) * inner(grad(s1), grad(T)))) * x[0] * dx() - (1 / Pe) * (-Bi * s1 * T * x[0] * ds(2))
     L_cyl = (- dot(f, v) - Qc2*s1) * x[0] * dx() - (1/Pe) * (s1 * Bi * Ta * x[0] * ds(2))
+    b0_cyl = - dot(dot(sigma2d(u, p), v), n) * x[0] * ds(0) - s1*dot(grad(T), n) * x[0] * ds(0)
+    b2_cyl = - dot(dot(sigma2d(u, p), v), n) * x[0] * ds(2)
+    b3_cyl = -dot(dot(sigma2d(u, p), v), n) * x[0] * ds(3)
+    b4_cyl = + dot(p*n, v) * x[0] * ds(4) # imposing symmetry condition
 
-    F = a + L + b0 + b2 + b3 + b4
-
-    F_cyl = a_cyl + L_cyl
+    F_cyl = a_cyl + L_cyl + b0_cyl + b2_cyl + b3_cyl + b4_cyl
 
     dw = TrialFunction(W)
     J = derivative(F, w, dw)
-    J_cyl = derivative(F_cyl, w, dw)
+    J_cyl = derivative(F_cyl, w, dw) # I think this is where I mess up
 
-    for Gamma_val in [1, 10, 15, 20, 23]:
+    for Gamma_val in [1, 10, 15, 20, 21, 22, 23]:
         Gamma.assign(Gamma_val)
         print('Gamma =', Gamma_val)
-        print('Iteration = ', i)
         # Choose either Cylindrical or Cartesian coordinates. Uncomment the relevant one.
-        problem = NonlinearVariationalProblem(F, w, bcs, J)
+        #problem = NonlinearVariationalProblem(F, w, bcs, J)
         #problem = NonlinearVariationalProblem(F_cyl, w, bcs_cyl, J_cyl)
 
-        solver = NonlinearVariationalSolver(problem)
-        solver.parameters["newton_solver"]["linear_solver"] = 'umfpack'
+        #solver = NonlinearVariationalSolver(problem)
+        #solver.parameters["newton_solver"]["linear_solver"] = 'umfpack'
 
-        solver.solve()
+        #solver.solve()
+        solve(F_cyl == 0, w, bcs_cyl)
+        #solve(F == 0, w, bcs)
         # Extract solution
         (u, p, T) = w.split()
 
-    # Vsig = TensorFunctionSpace(mesh, "DG", degree=0)
-    # sig = Function(Vsig, name="Stress")
-    # sig.assign(project(sigma2d(u, p), Vsig))
+    File("Results/v_CoupledCase1" + coord + "_X" + str(Xvalues[i]) + ".pvd") << u
+    File("Results/T_CoupledCase1" + coord + "_X" + str(Xvalues[i]) + ".pvd") << T
+    File("Results/p_CoupledCase1" + coord + "_X" + str(Xvalues[i]) + ".pvd") << p
+    Vsig = TensorFunctionSpace(mesh, "DG", degree=1)
+    sig = Function(Vsig, name="Stress" + str(Xvalues[i]))
+    sig.assign(project(sigma2d(u, p), Vsig))
+    File("Results/StressCase1" + coord + "_X" + str(Xvalues[i]) + ".pvd") << sig
     # area1 = assemble(1.0 * ds(1))
     # normal_stress1 = assemble(inner(sig * n, n) * ds(1)) / area1
-    flux = dot(u, n) * dot(u, n) * ds(1)
-    vel_flux_values.append(assemble(flux))
+    #flux = dot(u, n) * dot(u, n) * ds(1)
+    flux_cyl = dot(u, n) * dot(u, n) * x[0] * ds(1)
+    #vel_flux_values.append(assemble(flux))
+    vel_flux_values.append(assemble(flux_cyl))
 
+    # Cartesian
+    # area1 = assemble(1.0 * ds(1))
+    # normal_stress1 = assemble(inner(sig * n, n) * ds(1)) / area1
+    # area0 = assemble(1.0 * ds(0))
+    # area3 = assemble(1.0 * ds(3))
+    # normal_stress0 = assemble(inner(sig * n, n) * ds(0)) / area0
+    # normal_stress3 = assemble(inner(sig * n, n) * ds(3)) / area3
+
+    # Cylindric
+    area1 = assemble(1.0 * x[0] * ds(1))
+    normal_stress1 = assemble(inner(sig * n, n) * x[0] * ds(1)) / area1
+    area0 = assemble(1.0 * x[0] * ds(0))
+    area3 = assemble(1.0 * x[0] * ds(3))
+    normal_stress0 = assemble(inner(sig * n, n) * x[0] * ds(0)) / area0
+    normal_stress3 = assemble(inner(sig * n, n) * x[0] * ds(3)) / area3
+
+    normal_stress_values_ds0.append(normal_stress0)
+    normal_stress_values_ds1.append(normal_stress1)
+    normal_stress_values_ds3.append(normal_stress3)
+    #vel_flux_values.append(assemble(flux_cyl))
 
 fig = plt.figure()
 plt.plot(Xvalues, vel_flux_values)
 plt.ylabel('Velocity flux')
 plt.xlabel('X values')
-plt.title('Sweep over X values, Cartesian')
+plt.title('Sweep over X values, Cylindric')
 plt.show()
 values = np.asarray([Xvalues, vel_flux_values])
-np.savetxt("Results/XvsFlux.csv", values.T, delimiter='\t')
+np.savetxt("Results/XvsFlux" + coord + ".csv", values.T, delimiter='\t')
+
+values = np.asarray([Xvalues, normal_stress_values_ds0, normal_stress_values_ds1, normal_stress_values_ds3])
+np.savetxt("Results/XvsAverageNormalStressTop" + coord + ".csv", values.T, delimiter='\t')
