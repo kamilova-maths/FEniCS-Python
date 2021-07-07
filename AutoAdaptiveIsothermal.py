@@ -5,9 +5,9 @@ from mshr import *
 import matplotlib.pyplot as plt
 import numpy as np
 #mesh = UnitSquareMesh(8, 8)
-domain = Polygon([Point(0.2, 0), Point(0.2, 1), Point(0.1, 1), Point(0, 1), Point(0, 0)])
-mesh = generate_mesh(domain, 30)
-#mesh = RectangleMesh(Point(0, 0), Point(0.2, 1), 8, 8)
+#domain = Polygon([Point(0.2, 0), Point(0.2, 1), Point(0.1, 1), Point(0, 1), Point(0, 0)])
+#mesh = generate_mesh(domain, 30)
+mesh = RectangleMesh(Point(0, 0), Point(0.2, 1), 40, 40)
 n = FacetNormal(mesh)
 
 # Define Taylor--Hood function space W
@@ -158,21 +158,21 @@ w = Function(W)
 M = inner(w[0], w[0])*dx()
 M_cyl = inner(w[0], w[0])*x[0]*dx()
 # Define error tolerance
-tol = 1.e-6
+tol = 1.e-8
 
 # Solve equation a = L with respect to u and the given boundary
 # conditions, such that the estimated error (measured in M) is less
 # than tol
-#problem = LinearVariationalProblem(a, L, w, bcs)
-problem_cyl = LinearVariationalProblem(a_cyl, L_cyl, w, bcs)
-#solver = AdaptiveLinearVariationalSolver(problem_cyl, M_cyl)
-#solver.parameters["error_control"]["dual_variational_solver"]["linear_solver"] = "umfpack"
-#parameters["refinement_algorithm"] = "plaza_with_parent_facets"
-#solver.solve(tol)
+problem = LinearVariationalProblem(a, L, w, bcs)
+#problem_cyl = LinearVariationalProblem(a_cyl, L_cyl, w, bcs)
+solver = AdaptiveLinearVariationalSolver(problem, M)
+solver.parameters["error_control"]["dual_variational_solver"]["linear_solver"] = "umfpack"
+parameters["refinement_algorithm"] = "plaza_with_parent_facets"
+solver.solve(tol)
 
-solver = LinearVariationalSolver(problem_cyl)
-solver.parameters["linear_solver"] = "umfpack"
-solver.solve()
+#solver = LinearVariationalSolver(problem)
+#solver.parameters["linear_solver"] = "umfpack"
+#solver.solve()
 (u, p) = w.split()
 
 #solver.summary()
@@ -181,14 +181,14 @@ solver.solve()
 # Plot solution(s)
 
 # Plot solutions
-# (u0, p0) = w.root_node().split()
-# (u1, p1) = w.leaf_node().split()
+(u0, p0) = w.root_node().split()
+(u1, p1) = w.leaf_node().split()
 #
-# R = w.leaf_node().function_space()
+R = w.leaf_node().function_space()
 # plot(R.mesh())
 #
 #
-File("Results/velocityIsothermalCylindric.pvd") << u
+#File("Results/velocityIsothermalCylindric.pvd") << u
 #
 # File("Results/velocityIsothermalFinalMesh.pvd") << u1
 #
@@ -202,11 +202,10 @@ File("Results/velocityIsothermalCylindric.pvd") << u
 # #filename = "output/" + filename + ".xdmf"
 # #f = XDMFFile(MPI.comm_world, "IsothermalRefinedMesh.xdmf")
 #
-# File("Meshes/IsothermalRefinedMesh.xml") << R.mesh()
+File("Meshes/IsothermalAdaptiveMesh.xml") << R.mesh()
 #
-# File("Results/pressureIsothermalFinalMesh.pvd") << p1
-plot(u, title="Velocity on initial mesh")
-plt.show()
+# plot(u, title="Velocity on initial mesh")
+# plt.show()
 # plot(u1, title="Velocity on final mesh")
 # plt.show()
 #

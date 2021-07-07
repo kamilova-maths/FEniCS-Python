@@ -23,12 +23,19 @@ plt.show()
 # Manufactured solution NUMBER 1
 u_solns_ex = ['-sin(2*pi*x[1])', 'sin(2*pi*x[0])', '0.0']
 p_solns_ex = ['-cos(2*pi*x[0])*cos(2*pi*x[1])']
+f_solns_ex = ['2*pi*(cos(2*pi*x[1])*sin(2*pi*x[0]) - 2*pi*sin(2*pi*x[1]) )',
+              '2*pi*(2*pi*sin(2*pi*x[0]) + cos(2*pi*x[0])*sin(2*pi*x[1])) ']
 
 
 # Manufactured solution NUMBER 2 - this solution does not work because I have not changed f accordingly
 # u_solns_ex = ['sin(x[0])*(a*sin(a*x[1]) - cos(a)*sinh(x[1]))', 'cos(x[0])*(a*cos(a*x[1]) + cos(a)*cosh(x[1]))', '0.0']
 # p_solns_ex = ['(1+a*a)*cos(a)*cos(x[0])*sinh(x[1])']
+# f_solns_ex = ['2*pi*(cos(2*pi*x[1])*sin(2*pi*x[0]) - 2*pi*sin(2*pi*x[1]) )', ]
 
+# Manufactured solution NUMBER 3
+# u_solns_ex = ['sin(4*pi*x[0])*cos(4*pi*x[1])', '-cos(4*pi*x[0])*sin(4*pi*x[1])']
+# p_solns_ex = ['pi*cos(4*pi*x[0])*cos(4*pi*x[1])', '-9*pi*cos(4*pi*x[0])']
+# f_solns_ex = ['28*pi*pi*sin(4*pi*x[0])*cos(4*pi*x[1])', '-36*pi*pi*cos(4*pi*x[0])*sin(4*pi*x[1])']
 mu = Constant(1.0) # constant viscosity
 
 # We define the boundaries
@@ -70,8 +77,8 @@ for i in range(iterations):
     u_ex = Expression((u_solns_ex[0], u_solns_ex[1]), element=V, domain=mesh)
     p_ex = Expression(p_solns_ex[0], element=Q, domain=mesh)
 
-    f_ex0 = Expression('2*pi*(cos(2*pi*x[1])*sin(2*pi*x[0]) - 2*pi*sin(2*pi*x[1]) )', degree=2)
-    f_ex1 = Expression('2*pi*(2*pi*sin(2*pi*x[0]) + cos(2*pi*x[0])*sin(2*pi*x[1])) ', degree=2)
+    f_ex0 = Expression(f_solns_ex[0], degree=2)
+    f_ex1 = Expression(f_solns_ex[1], degree=2)
 
     f_ex = as_vector([f_ex0, f_ex1])
 
@@ -118,7 +125,7 @@ for i in range(iterations):
 
     errors_u_max.append(np.max(np.abs(vertex_values_u_ex - vertex_values_u)))
     errors_p_max.append(np.max(np.abs(vertex_values_p_ex - vertex_values_p)))
-    errors_u.append(errornorm(u_ex, u, 'L2'))
+    errors_u.append(errornorm(u_ex, u, 'H1'))
     errors_p.append(errornorm(p_ex, p, 'L2'))
     # M_u = inner((u_ex - u), (u_ex - u)) * dx
     # M_p = (p_ex - p)*(p_ex - p) * dx

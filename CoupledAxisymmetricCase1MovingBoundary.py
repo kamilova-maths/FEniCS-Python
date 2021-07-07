@@ -53,24 +53,28 @@ def div_cyl(v):
 
 Gamma = Constant(10.0)
 Pe = Constant(27.0)
-Bi = Constant(11.6)
+Bi = Constant(1.0)
+#Bi = Constant(100.0) # Bi large
 # Cartesian
 u_in = Constant(-2.0)
 
 # Cylindric
 u_in_cyl = Constant(-4.0)
-
+#uin_val = "Org"
+#uin_val = "Twice"
+#uin_val = "Half"
+val =  "Bi1" #Thing that I am changing
+#uin_val = "Two"
 u_c = Constant(-1.0)
 
 
-f = Constant((0, -1))
 
 # Choose a mesh. You can also import a previously adapted mesh
 
 #domain = Polygon([Point(0.2, 0), Point(0.2, 1), Point(0.1, 1), Point(0, 1), Point(0, 0)])
 #mesh = generate_mesh(domain, 8)
-mesh = RectangleMesh(Point(0, 0), Point(0.2, 1), 60, 60)
-#mesh = Mesh('Meshes/CoupledRefinedMeshGamma5Cartesian.xml')
+#mesh = RectangleMesh(Point(0, 0), Point(0.2, 1), 60, 60)
+mesh = Mesh('Meshes/CoupledRefinedMeshGamma5Cartesian.xml')
 
 
 # Define Taylor--Hood function space W
@@ -150,13 +154,13 @@ for i in range(len(Xvalues)):
     b2 = - dot(dot(sigma2d(u, p), v), n) * ds(2)
     b3 = -dot(dot(sigma2d(u, p), v), n) * ds(3)
     b4 = + dot(p*n, v) * ds(4)
-    L = (- dot(f, v) - Qc2*s1) * dx() - (1/Pe) * (s1 * Bi * Ta * ds(2))
+    L = (- Qc2*s1) * dx() - (1/Pe) * (s1 * Bi * Ta * ds(2))
     F = a + L + b0 + b2 + b3 + b4
 
     # Cylindric
     a_cyl = (inner(sigma_cyl(u, p), epsilon_cyl(v)) - div_cyl(u) * q + (dot(u, grad(T)) * s1 + (
            1 / Pe) * inner(grad(s1), grad(T)))) * x[0] * dx() - (1 / Pe) * (-Bi * s1 * T * x[0] * ds(2))
-    L_cyl = (- dot(f, v) - Qc2*s1) * x[0] * dx() - (1/Pe) * (s1 * Bi * Ta * x[0] * ds(2))
+    L_cyl = (- Qc2*s1) * x[0] * dx() - (1/Pe) * (s1 * Bi * Ta * x[0] * ds(2))
     b0_cyl = - dot(dot(sigma2d(u, p), v), n) * x[0] * ds(0) - s1*dot(grad(T), n) * x[0] * ds(0)
     b2_cyl = - dot(dot(sigma2d(u, p), v), n) * x[0] * ds(2)
     b3_cyl = -dot(dot(sigma2d(u, p), v), n) * x[0] * ds(3)
@@ -168,7 +172,7 @@ for i in range(len(Xvalues)):
     J = derivative(F, w, dw)
     J_cyl = derivative(F_cyl, w, dw) # I think this is where I mess up
 
-    for Gamma_val in [1, 10, 15, 20, 21, 22, 23]:
+    for Gamma_val in [1, 10, 15, 20, 23]:
         Gamma.assign(Gamma_val)
         print('Gamma =', Gamma_val)
         # Choose either Cylindrical or Cartesian coordinates. Uncomment the relevant one.
@@ -184,15 +188,19 @@ for i in range(len(Xvalues)):
         # Extract solution
         (u, p, T) = w.split()
 
-    File("Results/v_CoupledCase1" + coord + "_X" + str(Xvalues[i]) + ".pvd") << u
-    File("Results/T_CoupledCase1" + coord + "_X" + str(Xvalues[i]) + ".pvd") << T
-    File("Results/p_CoupledCase1" + coord + "_X" + str(Xvalues[i]) + ".pvd") << p
+    File("Results/velocityCoupledCase1" + coord + "_X" + str(Xvalues[i]) + val + ".pvd") << u
+    File("Results/TemperatureCoupledCase1" + coord + "_X" + str(Xvalues[i]) + val + ".pvd") << T
+    File("Results/pressureCoupledCase1" + coord + "_X" + str(Xvalues[i]) + val + ".pvd") << p
     Vsig = TensorFunctionSpace(mesh, "DG", degree=1)
     sig = Function(Vsig, name="Stress" + str(Xvalues[i]))
     sig.assign(project(sigma2d(u, p), Vsig))
-    File("Results/StressCase1" + coord + "_X" + str(Xvalues[i]) + ".pvd") << sig
-    # area1 = assemble(1.0 * ds(1))
-    # normal_stress1 = assemble(inner(sig * n, n) * ds(1)) / area1
+    File("Results/StressCase1" + coord + "_X" + str(Xvalues[i]) + val + ".pvd") << sig
+
+    W2 = FunctionSpace(mesh, S)
+    Pmu = project(mu(), W2)
+
+    File("Results/ViscosityCoupled" + coord +"_X" + str(Xvalues[i]) + val + ".pvd") << Pmu
+
     #flux = dot(u, n) * dot(u, n) * ds(1)
     flux_cyl = dot(u, n) * dot(u, n) * x[0] * ds(1)
     #vel_flux_values.append(assemble(flux))
@@ -208,11 +216,11 @@ for i in range(len(Xvalues)):
 
     # Cylindric
     area1 = assemble(1.0 * x[0] * ds(1))
-    normal_stress1 = assemble(inner(sig * n, n) * x[0] * ds(1)) / area1
+    normal_stress1 = assemble(2*np.pi*inner(sig * n, n) * x[0] * ds(1))
     area0 = assemble(1.0 * x[0] * ds(0))
     area3 = assemble(1.0 * x[0] * ds(3))
-    normal_stress0 = assemble(inner(sig * n, n) * x[0] * ds(0)) / area0
-    normal_stress3 = assemble(inner(sig * n, n) * x[0] * ds(3)) / area3
+    normal_stress0 = assemble(2*np.pi*inner(sig * n, n) * x[0] * ds(0))
+    normal_stress3 = assemble(2*np.pi*inner(sig * n, n) * x[0] * ds(3))
 
     normal_stress_values_ds0.append(normal_stress0)
     normal_stress_values_ds1.append(normal_stress1)
@@ -226,7 +234,7 @@ plt.xlabel('X values')
 plt.title('Sweep over X values, Cylindric')
 plt.show()
 values = np.asarray([Xvalues, vel_flux_values])
-np.savetxt("Results/XvsFlux" + coord + ".csv", values.T, delimiter='\t')
+np.savetxt("Results/XvsFlux" + coord + val + ".csv", values.T, delimiter='\t')
 
 values = np.asarray([Xvalues, normal_stress_values_ds0, normal_stress_values_ds1, normal_stress_values_ds3])
-np.savetxt("Results/XvsAverageNormalStressTop" + coord + ".csv", values.T, delimiter='\t')
+np.savetxt("Results/XvsAverageNormalStressTop" + coord + val + ".csv", values.T, delimiter='\t')

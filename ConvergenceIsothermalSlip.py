@@ -5,7 +5,7 @@ import numpy as np
 
 # Define mesh and geometry - We solve for half of the domain we need, and impose symmetry
 #mesh = Mesh('Meshes/IsothermalRefinedMesh.xml')
-mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 3, 3)
+mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 3, 3, "crossed")
 n = FacetNormal(mesh)
 
 
@@ -96,7 +96,7 @@ sig_num = Function(Vsig, name="Stress Numeric")
 sig_num.assign(project(sigma(u, p), Vsig))
 #vtkfile_stress << (sig_num, 0)
 area1 = assemble(1.0 * ds(1))
-normal_stress1 = [assemble(inner(sig_num * n, n) * ds(1)) / area1]
+normal_stress0 = [assemble(inner(sig_num * n, n) * ds(0)) ]
 N = 5
 
 for i in range(N):
@@ -155,14 +155,14 @@ for i in range(N):
     sig_num.assign(project(sigma(u, p), Vsig))
     v#tkfile_stress << (sig_num, i + 1)
 
-    area1 = assemble(1.0 * ds(1))
-    normal_stress1.append(assemble(inner(sig_num * n, n) * ds(1)) / area1)
+#    area1 = assemble(1.0 * ds(1))
+    normal_stress0.append(assemble(inner(sig_num * n, n) * ds(0)) )
 
     errors_u.append(errornorm(u, u_prev, norm_type='L2'))
     errors_p.append(np.abs(errornorm(p, p_prev, norm_type='L2')))
 
-normal_stress_averages = np.asarray([hvalues, normal_stress1])
-#np.savetxt("Results/AverageNormalStressIsothermalSlipds1.csv", normal_stress_averages.T, delimiter='\t')
+normal_stress_averages = np.asarray([hvalues, normal_stress0])
+np.savetxt("Results/AverageNormalStressIsothermalSlipds0.csv", normal_stress_averages.T, delimiter='\t')
 
-values = np.asarray([hvalues, errors_u, errors_p])
-np.savetxt("Results/ErrorsIsothermalSlip.csv", values.T, delimiter='\t')
+# values = np.asarray([hvalues, errors_u, errors_p])
+# np.savetxt("Results/ErrorsIsothermalSlip.csv", values.T, delimiter='\t')

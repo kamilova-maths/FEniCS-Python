@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 #domain = Polygon([Point(0.2, 0), Point(0.2, 1), Point(0.1, 1), Point(0, 1), Point(0, 0)])
 #mesh = generate_mesh(domain, 8)
-mesh = RectangleMesh(Point(0, 0), Point(0.2, 1), 30, 30)
+mesh = RectangleMesh(Point(0, 0), Point(0.2, 1), 40, 40, "crossed")
 #mesh = Mesh('Meshes/CoupledRefinedMeshGamma5Cartesian.xml')
 n = FacetNormal(mesh)
 
@@ -21,12 +21,12 @@ w = Function(W)
 
 # Define the viscosity and bcs
 # Qfun should be 2.3710
-Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=3, Qfun=0.25, x1=0.3,
+Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=3, Qfun=2.3710, x1=0.3,
                 x2=0.1)
-
+Qc2.Qfun = 2*2.3710
 Ta = Expression("1-x[1]", degree=1)
 
-Gamma = Constant(23.0)
+Gamma = Constant(5.0)
 Pe = Constant(27.0)
 Bi = Constant(11.6)
 # Cartesian
@@ -137,10 +137,10 @@ J = derivative(F, w, dw)
 J_cyl = derivative(F_cyl, w, dw)
 M = inner(w[0], w[0]) * dx()
 M_cyl = inner(w[0], w[0]) * x[0] * dx()
-problem = NonlinearVariationalProblem(F, w, bcs, J)
-#problem_cyl = NonlinearVariationalProblem(F_cyl, w, bcs_cyl, J_cyl)
-solver = AdaptiveNonlinearVariationalSolver(problem, M)
-#solver = AdaptiveNonlinearVariationalSolver(problem_cyl, M_cyl)
+#problem = NonlinearVariationalProblem(F, w, bcs, J)
+problem_cyl = NonlinearVariationalProblem(F_cyl, w, bcs_cyl, J_cyl)
+#solver = AdaptiveNonlinearVariationalSolver(problem, M)
+solver = AdaptiveNonlinearVariationalSolver(problem_cyl, M_cyl)
 #solver = NonlinearVariationalSolver(problem)
 solver.parameters["error_control"]["dual_variational_solver"]["linear_solver"] = "umfpack"
 #solver.parameters["nonlinear_solver"] = "cg"
@@ -184,4 +184,4 @@ plt.show()
 # File("Results/pressureDecoupledFinalMesh.pvd") << p1
 # File("Results/TemperatureDecoupledInitialMesh.pvd") << T0
 # File("Results/TemperatureDecoupledFinalMesh.pvd") << T1
-File("Meshes/CoupledRefinedMeshQsmallCartesian.xml") << R.mesh()
+File("Meshes/CoupledRefinedMeshQTwiceGamma5Cyl.xml") << R.mesh()

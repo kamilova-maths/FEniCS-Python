@@ -5,32 +5,8 @@ import numpy as np
 
 # Choose a mesh. You can also import a previously adapted mesh
 
-#domain = Polygon([Point(0.2, 0), Point(0.2, 1), Point(0.1, 1), Point(0, 1), Point(0, 0)])
-#mesh = generate_mesh(domain, 8)
-#mesh = RectangleMesh(Point(0, 0), Point(0.2, 1), 70, 70)
-#mesh = Mesh('Meshes/CoupledRefinedMeshGamma5Cartesian.xml')
-
-# Define mesh and geometry
-def mesh_ref(lx,ly, Nx,Ny):
-    m = UnitSquareMesh(Nx, Ny)
-    x = m.coordinates()
-
-    #Refine on top and bottom sides
-    x[:,1] = (x[:,1] - 0.5) * 2.
-    x[:,1] = 0.5 * (np.cos(pi * (x[:,1] - 1.) / 2.) + 1.)
-    # x[:, 0] = (x[:, 0] - 0.5) * 2.
-    # x[:, 0] = 0.5 * (np.cos(pi * (x[:, 0] - 1.) / 2.) + 1.)
-    #Scale
-    x[:,0] = x[:,0]*lx
-    x[:,1] = x[:,1]*ly
-
-    return m
-
-mesh = mesh_ref(0.2, 1.0, 30, 30)
-
-#mesh = refine(mesh)
-
-
+mesh = Mesh('Meshes/CoupledRefinedMeshGamma5Cartesian.xml')
+#mesh = Mesh('Meshes/CoupledRefinedMeshSlip.xml')
 n = FacetNormal(mesh)
 
 # Define Taylor--Hood function space W
@@ -52,10 +28,11 @@ Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,
 Ta = Expression("1-x[1]", degree=1)
 
 Gamma = Constant(23.0)
-Pe = Constant(27.0)
+Pe = Constant(27)
 Bi = Constant(11.6)
+val = "FZeroPZero" # whatever I am testing at the time
 # Cartesian
-u_in = Constant(-4.0)
+u_in = Constant(-2.0)
 
 # Cylindric
 u_in_cyl = Constant(-4.0)
@@ -63,6 +40,7 @@ u_in_cyl = Constant(-4.0)
 u_c = Constant(-1.0)
 
 inflow = 'near(x[1], 1.0) && x[0]<=0.1'
+right = 'near(x[1], 1.0) && x[0]>=0.1'
 wall = 'near(x[0], 0.2)'
 centre = 'near(x[0], 0.0)'
 outflow = 'near(x[1], 0.0)'
@@ -70,11 +48,11 @@ bcu_inflow = DirichletBC(W.sub(0), (0.0, u_in), inflow)
 bcu_inflow_cyl = DirichletBC(W.sub(0), (0.0, u_in_cyl), inflow)
 bcu_wall = DirichletBC(W.sub(0), (0.0, u_c), wall)
 bcu_outflow = DirichletBC(W.sub(0), (0.0, u_c), outflow)
-bcP_outflow = DirichletBC(W.sub(1), 0.0, outflow)
+bcP_right = DirichletBC(W.sub(1), 0.0, right)
 bcu_symmetry = DirichletBC(W.sub(0).sub(0), Constant(0.0), centre)
 bcT_inflow = DirichletBC(W.sub(2), 0.0, inflow)
 bcs = [bcu_inflow, bcu_wall, bcu_outflow, bcu_symmetry, bcT_inflow]
-bcs_cyl = [bcu_inflow_cyl, bcu_wall, bcu_outflow, bcu_symmetry, bcT_inflow]
+bcs_cyl = [bcu_inflow_cyl, bcu_wall, bcu_outflow, bcu_symmetry, bcT_inflow, bcP_right]
 x = SpatialCoordinate(mesh)
 
 
@@ -85,9 +63,8 @@ def mu(T_local=None):
 
 
 def epsilon(v):
-    return sym(as_tensor([[v[0].dx(0), v[0].dx(1), 0],
-                          [v[1].dx(0), v[1].dx(1), 0],
-                          [0, 0, 0]]))
+    return sym(as_tensor([[v[0].dx(0), v[0].dx(1)],
+                          [v[1].dx(0), v[1].dx(1)]]))
 
 
 # symmetric cylindric gradient
@@ -99,7 +76,7 @@ def epsilon_cyl(v):
 
 # stress tensor
 def sigma(v, p):
-    return 2*mu()*epsilon(v)-Id(p)
+    return 2*mu()*epsilon(v)-p*Identity(2)
 
 
 # stress tensor
@@ -113,14 +90,6 @@ def Id(p):
                      [0, 0, p]])
 
 
-# these should be the same for cylindric and Cartesian... I think ... x.x
-def epsilon2d(v):
-    return sym(as_tensor([[v[0].dx(0), v[0].dx(1)],
-                          [v[1].dx(0), v[1].dx(1)]]))
-
-
-def sigma2d(v, p):
-    return 2*mu()*epsilon2d(v) - p*Identity(2)
 
 
 def div_cyl(v):
@@ -128,7 +97,7 @@ def div_cyl(v):
 
 
 # Define the variational form
-f = Constant((0, -1))
+f = Constant((0, -0))
 
 facet_f = MeshFunction("size_t", mesh, mesh.topology().dim() - 1) # FACET function
 
@@ -140,141 +109,80 @@ CompiledSubDomain('near(x[0], 0.0)').mark(facet_f, 4)
 
 # Create the measure
 ds = Measure("ds", domain=mesh, subdomain_data=facet_f)
-
-# Cartesian
-a1 = inner(sigma(u, p), epsilon(v)) * dx() - dot(f, v) * dx()
-a = (inner(sigma(u, p), epsilon(v)) - div(u) * q + (dot(u, grad(T)) * s1 + (
-       1 / Pe) * inner(grad(s1), grad(T)))) * dx() - (1 / Pe) * (-Bi * s1 * T * ds(2)) - s1*dot(grad(T), n)*ds(0)
-b0 = - dot(dot(sigma2d(u, p), v), n) * ds(0)
-b2 = - dot(dot(sigma2d(u, p), v), n) * ds(2)
-b3 = -dot(dot(sigma2d(u, p), v), n) * ds(3)
-b4 = + dot(p*n, v) * ds(4)
-#b4 = -dot(dot(sigma2d(u, p), v), n) * ds(4)
-b = b0 + b2 + b3 + b4
-L = (- dot(f, v) - Qc2*s1) * dx() - (1/Pe) * (s1 * Bi * Ta * ds(2))
-
-F = a + L + b
-# Cylindric
-a_cyl = (inner(sigma_cyl(u, p), epsilon_cyl(v)) - div_cyl(u) * q + (dot(u, grad(T)) * s1 + (
-       1 / Pe) * inner(grad(s1), grad(T)))) * x[0] * dx() - (1 / Pe) * (-Bi * s1 * T * x[0] * ds(2))
-L_cyl = (- dot(f, v) - Qc2*s1) * x[0] * dx() - (1/Pe) * (s1 * Bi * Ta * x[0] * ds(2)) - s1*dot(grad(T), n)* x[0] * ds(0)
-b0_cyl = - dot(dot(sigma2d(u, p), v), n) * x[0] * ds(0)
-b2_cyl = - dot(dot(sigma2d(u, p), v), n) * x[0] * ds(2)
-b3_cyl = -dot(dot(sigma2d(u, p), v), n) * x[0] * ds(3)
-b4_cyl = + dot(p*n, v) * x[0] * ds(4)
-b_cyl = b0_cyl + b2_cyl + b3_cyl + b4_cyl
-
-F_cyl = a_cyl + L_cyl + b_cyl
-
+coord = "Cyl" # can also be "Cyl"
+ind = 0 # 0 is Cartesian, 1 is Cylindric. Let's not make it too complicated, definitely fix it later.
 dw = TrialFunction(W)
-J = derivative(F, w, dw)
-J_cyl = derivative(F_cyl, w, dw)
+if ind == 1:
+# Cartesian
+    a1 = inner(sigma(u, p), epsilon(v)) * dx() - dot(f, v) * dx()
+    a = (inner(sigma(u, p), epsilon(v)) - div(u) * q + (dot(u, grad(T)) * s1 + (
+           1 / Pe) * inner(grad(s1), grad(T)))) * dx() - (1 / Pe) * (-Bi * s1 * T * ds(2)) - s1*dot(grad(T), n)*ds(0)
+    b0 = - dot(dot(sigma(u, p), v), n) * ds(0)
+    b2 = - dot(dot(sigma(u, p), v), n) * ds(2)
+    b3 = -dot(dot(sigma(u, p), v), n) * ds(3)
+    b4 = + dot(p*n, v) * ds(4)
+    #b4 = -dot(dot(sigma2d(u, p), v), n) * ds(4)
+    b = b0 + b2 + b3 + b4
+    L = (- dot(f, v) - Qc2*s1) * dx() - (1/Pe) * (s1 * Bi * Ta * ds(2))
 
-for Gamma_val in [10, 15, 20, 23]:
+    F = a + L + b
+    J = derivative(F, w, dw)
+else:
+    # Cylindric
+    print("I am cylindric")
+    a_cyl = (inner(sigma_cyl(u, p), epsilon_cyl(v)) - div_cyl(u) * q + (dot(u, grad(T)) * s1 + (
+           1 / Pe) * inner(grad(s1), grad(T)))) * x[0] * dx() - (1 / Pe) * (-Bi * s1 * T * x[0] * ds(2))
+    L_cyl = (- dot(f, v) - Qc2*s1) * x[0] * dx() - (1/Pe) * (s1 * Bi * Ta * x[0] * ds(2)) - s1*dot(grad(T), n)* x[0] * ds(0)
+    b0_cyl = - dot(dot(sigma(u, p), v), n) * x[0] * ds(0)
+    b2_cyl = - dot(dot(sigma(u, p), v), n) * x[0] * ds(2)
+    b3_cyl = -dot(dot(sigma(u, p), v), n) * x[0] * ds(3)
+    b4_cyl = + dot(p*n, v) * x[0] * ds(4)
+    b_cyl = b0_cyl + b2_cyl + b3_cyl + b4_cyl
+
+    F_cyl = a_cyl + L_cyl + b_cyl
+    F = F_cyl
+    J_cyl = derivative(F_cyl, w, dw)
+    J = J_cyl
+    bcs = bcs_cyl
+
+
+print("The coordinate system is ", coord)
+for Gamma_val in [1, 5, 10, 15, 20, 23]:
     Gamma.assign(Gamma_val)
     print('Gamma =', Gamma_val)
-    # Choose either Cylindrical or Cartesian coordinates. Uncomment the relevant one.
     problem = NonlinearVariationalProblem(F, w, bcs, J)
-    #problem = NonlinearVariationalProblem(F_cyl, w, bcs_cyl, J_cyl)
-
     solver = NonlinearVariationalSolver(problem)
     solver.parameters["newton_solver"]["linear_solver"] = 'umfpack'
 
     solver.solve()
     # Extract solution
     (u, p, T) = w.split()
-#solver.summary()
 
+Vsig = TensorFunctionSpace(mesh, "DG", degree=0)
+sig = Function(Vsig, name="Stress" + coord)
+sig.assign(project(sigma(u, p), Vsig))
+if ind==1:
+    normal_stress0 = assemble(inner(sig*n, n)*ds(0))
+    flux1 = assemble(dot(u, n) * dot(u, n) * ds(1))
+    values = np.asarray([normal_stress0, flux1])
+    print("Flux 1", flux1)
+else:
+    normal_stress0 = assemble(2*np.pi*inner(sig*n, n)*x[0]*ds(0))
+    flux1 = assemble(2*np.pi*dot(u, n) * dot(u, n) * x[0] * ds(1))
+    values = np.asarray([normal_stress0, flux1])
+    print("Flux 1", flux1)
 
-# Vsig = TensorFunctionSpace(mesh, "DG", degree=1)
-# sig = Function(Vsig, name="Stress")
-# sig.assign(project(sigma2d(u, p), Vsig))
-# area0 = assemble(1.0*ds(0))
-# area1 = assemble(1.0 * ds(1))
-# area2 = assemble(1.0 * ds(2))
-# area3 = assemble(1.0 * ds(3))
-# area4 = assemble(1.0 * ds(4))
-# print("area at ds0 is", area0)
-# print("area at ds1 is", area1)
-# print("area at ds2 is", area2)
-# print("area at ds3 is", area3)
-# print("area at ds4 is", area4)
-# normal_stress0 = assemble(inner(sig*n, n)*ds(0))/area0
-# normal_stress1 = assemble(inner(sig * n, n) * ds(1))/area1
-# normal_stress2 = assemble(inner(sig * n, n) * ds(2))/area2
-# normal_stress3 = assemble(inner(sig * n, n) * ds(3))/area3
-# normal_stress4 = assemble(inner(sig * n, n) * ds(4))/area4
-# print("Stress at (0.1, 1):", sig(0.1, 1))
-# print("Normal stress at boundary 0", normal_stress0)
-# print("Normal stress at boundary 1", normal_stress1)
-# print("Normal stress at boundary 2", normal_stress2)
-# print("Normal stress at boundary 3", normal_stress3)
-# print("Normal stress at boundary 4", normal_stress4)
 #
-# sav = 0.0
-# if sav == 1.0:
-# # Saving data
-#     File("Results/velocityCoupledCylAdaptedMesh.pvd") << u
-#     File("Results/pressureCoupledCylAdaptedMesh.pvd") << p
-#     File("Results/TemperatureCoupledCylAdaptedMesh.pvd") << T
-#
-#     W2 = FunctionSpace(mesh, S)
-#     Pmu = project(mu(), W2)
-#
-#     File("Results/ViscosityCoupledCylAdaptedMesh.pvd") << Pmu
+sav = 1.0
+if sav == 1.0:
+# Saving data
+    np.savetxt("Results/valuesCoupled" + coord + val + "AdaptiveMesh.csv", values.T, delimiter='\t')
+    File("Results/velocityCoupled" + coord + val + "AdaptiveMesh.pvd") << u
+    File("Results/pressureCoupled" + coord + val + "AdaptiveMesh.pvd") << p
+    File("Results/TemperatureCoupled" + coord + val + "AdaptiveMesh.pvd") << T
+    File("Results/StressCoupled" + coord + val + "AdaptiveMesh.pvd") << sig
+    W2 = FunctionSpace(mesh, S)
+    Pmu = project(mu(), W2)
 
-# Option 1
-f_int = assemble(a1)
+    File("Results/ViscosityCoupled" + coord + val + "AdaptedMesh.pvd") << Pmu
 
-#bcu_inflow.apply(f_int)
-bcu_wall.apply(f_int)
-bcu_outflow.apply(f_int)
-bcu_symmetry.apply(f_int)
-
-x_dofs = W.sub(0).sub(0).dofmap().dofs()
-y_dofs = W.sub(0).sub(1).dofmap().dofs()
-Fx = 0
-for i in x_dofs:
-    Fx += f_int[i]
-
-Fy = 0
-for i in y_dofs:
-    Fy += f_int[i]
-
-print("Horizontal reaction force: %f" % (Fx))
-print("Vertical reaction force: %f" % (Fy))
-
-
-#Option 2
-# f_ext_unknown_tot = assemble(a1)
-#
-# f_ext_unknown_0 = assemble(b0)
-#
-# f_ext_unknown_2 = assemble(b2)
-#
-# f_ext_unknown_3 = assemble(b3)
-#
-# f_ext_unknown_4 = assemble(b4)
-#
-# Fy_tot = 0
-# Fy_0 = 0
-# Fy_2 = 0
-# Fy_3 = 0
-# Fy_4 = 0
-#
-# y_dofs = W.sub(0).sub(1).dofmap().dofs()
-#
-# for i in y_dofs:
-#     Fy_tot += f_ext_unknown_tot[i]
-#     Fy_0 += f_ext_unknown_0[i]
-#     Fy_2 += f_ext_unknown_2[i]
-#     Fy_3 += f_ext_unknown_3[i]
-#     Fy_4 += f_ext_unknown_4[i]
-#
-# print("Fy_tot is", Fy_tot)
-# print("Fy_0 is", Fy_0)
-# print("Fy_2 is", Fy_2)
-# print("Fy_3 is", Fy_3)
-# print("Fy_4 is", Fy_4)
-#
-# print("Sum between the four above is", Fy_0 + Fy_2 + Fy_3 + Fy_4)

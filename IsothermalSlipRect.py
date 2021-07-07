@@ -16,26 +16,13 @@ a = 1
 
 # Define stress tensor
 def epsilon(v):
-   return sym(as_tensor([[v[0].dx(0), v[0].dx(1), 0],
-                         [v[1].dx(0), v[1].dx(1), 0],
-                         [0, 0, 0]]))
+   return sym(as_tensor([[v[0].dx(0), v[0].dx(1)],
+                         [v[1].dx(0), v[1].dx(1)]]))
 
 # stress tensor
 def sigma(v, p):
-    return 2*mu*epsilon(v)-Id(p)
+    return 2*mu*epsilon(v)-p*Identity(2)
 
-
-def Id(p):
-    return as_tensor([[p, 0, 0],
-                      [0, p, 0],
-                     [0, 0, p]])
-
-def cond(v):
-    return sym(as_tensor([[v[0].dx(0), v[0].dx(1)],
-                          [v[1].dx(0), v[1].dx(1)]]))
-
-def sigmabc(v, p):
-    return 2*mu*cond(v) - p*Identity(2)
 
 
 # Define the variational form

@@ -6,7 +6,7 @@ from ufl import replace
 # Define mesh and geometry - We solve for half of the domain we need, and impose symmetry
 #domain = Polygon([Point(1, 0), Point(1, 0.5), Point(0.5, 1), Point(0, 1), Point(0, 0)])
 #mesh = generate_mesh(domain, 10)
-mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 3, 3)
+mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 3, 3, "crossed")
 #mesh = Mesh('Meshes/IsothermalRefinedMesh.xml')
 n = FacetNormal(mesh)
 
@@ -85,13 +85,12 @@ vtkfile_p = File('Results/Isothermal_meshref_p.pvd')
 vtkfile_stress = File('Results/Isothermal_meshref_stress.pvd')
 
 Vsig = TensorFunctionSpace(mesh, "DG", degree=0)
-sig = TensorFunctionSpace(mesh, "DG", degree=0)
+#sig = TensorFunctionSpace(mesh, "DG", degree=0)
 sig_num = Function(Vsig, name="Stress Numeric")
 sig_num.assign(project(sigma(u, p), Vsig))
 vtkfile_stress << (sig_num, 0)
-area1 = assemble(1.0 * ds(1))
-normal_stress1 = [assemble(inner(sig_num * n, n) * ds(1)) / area1]
-for i in range(6):
+normal_stress0 = [assemble(inner(sig_num * n, n) * ds(0)) ]
+for i in range(5):
     # Create the measure
     mesh = refine(mesh)
     n = FacetNormal(mesh)
@@ -141,14 +140,14 @@ for i in range(6):
     vtkfile_stress << (sig_num, i+1)
 
     area1 = assemble(1.0 * ds(1))
-    normal_stress1.append(assemble(inner(sig_num * n, n) * ds(1)) / area1)
+    normal_stress0.append(assemble(inner(sig_num * n, n) * ds(0)) )
 
     errors_u.append(errornorm(u, u_prev, norm_type='L2'))
     errors_p.append(np.abs(errornorm(p, p_prev, norm_type='L2')))
 
 
-normal_stress_averages = np.asarray([hvalues, normal_stress1])
-np.savetxt("Results/AverageNormalStressds1.csv", normal_stress_averages.T, delimiter='\t')
+normal_stress_averages = np.asarray([hvalues, normal_stress0])
+np.savetxt("Results/AverageNormalStressds0.csv", normal_stress_averages.T, delimiter='\t')
 # rvalues = [0]
 # for i in range(len(errors_u)-1):
 #     rvalues.append(np.log(errors_u[i+1]/errors_u[i])/np.log(hvalues[i+1]/hvalues[i]))

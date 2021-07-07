@@ -2,11 +2,12 @@ from dolfin import *
 from mshr import *
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import integrate
 # Define mesh and geometry - We solve for half of the domain we need, and impose symmetry
 #domain = Polygon([Point(1, 0), Point(1, 0.5), Point(0.5, 1), Point(0, 1), Point(0, 0)])
 #mesh = generate_mesh(domain, 100)
-mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 60, 60, "crossed")
-#mesh = Mesh('Meshes/IsothermalRefinedMesh.xml')
+#mesh = RectangleMesh(Point(0, 0), Point(0.2, 1.0), 80, 80, "crossed")
+mesh = Mesh('Meshes/IsothermalAdaptiveMesh.xml')
 n = FacetNormal(mesh)
 
 # V = VectorElement("CG", mesh.ufl_cell(),  2)
@@ -42,7 +43,7 @@ wall = 'near(x[0], 0.2)'
 centre = 'near(x[0], 0.0)'
 outflow = 'near(x[1], 0.0)'
 pinpoint = 'near(x[1], 1.0) && near(x[0], 0.1)'
-bcp_pinpoint = DirichletBC(W.sub(1), Constant(0.0), pinpoint, "pointwise")
+#bcp_pinpoint = DirichletBC(W.sub(1), Constant(0.0), pinpoint, "pointwise")
 bcu_inflow = DirichletBC(W.sub(0), (0.0, u_in), inflow)
 bcu_wall = DirichletBC(W.sub(0), (0.0, u_c), wall)
 bcu_outflow = DirichletBC(W.sub(0), (0.0, u_c), outflow)
@@ -90,10 +91,9 @@ solve(F == 0, w, bcs)
 # Plot solutions
 (u, p) = w.split()
 
-N = 300 # size of the arrays below
+N = 5000 # size of the arrays below
 x0val_right = np.linspace(0.1, 0.2, N)
 x0val_left = x0val_right - 0.1
-
 
 Vsig = TensorFunctionSpace(mesh, "DG", degree=0)
 sig = Function(Vsig, name="Stress")
@@ -102,30 +102,56 @@ sig.assign(project(sigma(u, p), Vsig))
 area0 = assemble(1.0*ds(0))
 print("area at ds0 is", area0)
 
-normal_stress0 = assemble(inner(sig*n, n)*ds(0))/area0
+normal_stress_org = assemble(inner(sig*n, n)*ds(0))
 
-print("Normal stress at boundary 0", normal_stress0)
+print("Normal stress at boundary 0", normal_stress_org)
+
+def pred_sing(x, C_n):
+    return  -C_n*2*(0.1-x)**(-1/2)
+
+
+def pred_sing_int(delta, C_n):
+    return -C_n*2*2*(delta)**(1/2)
+
+
+# We define the delta value to use, based on just guesswork x.x
+delta_values = np.logspace(-1.1, -4, num=20) #This gives delta values up to delta=0.005.
+stress_values = []
+stress_values_2 = []
+for i in range(len(delta_values)):
+    delta = delta_values[i]
+    x0val_delta = np.linspace(0, 0.1-delta, N)
+    stress_top_left_calc = []
+    for j in range(len(x0val_delta)):
+        stress_top_left_calc.append(sig(x0val_delta[j], 1.0)[3])
+
+    val = stress_top_left_calc[-1]
+    x0val_rest = np.linspace(x0val_delta[-1], 0.1, N)
+    #dx_calc = (0.1 - delta) / (N - 1)
+    #dx_sing = (x0val_rest[-1] - x0val_rest[0]) / (N - 1)
+    #C_n = np.abs(val / pred_sing(x0val_rest[0], 1.0))
+    C_n = 8.04
+    pred_sing_val = pred_sing(x0val_rest[0:-1], C_n)
+
+    stress_average = np.abs(np.sum(stress_top_left_calc) * (x0val_left[-1]-x0val_left[0])) / N  + np.abs(np.sum(pred_sing_val))*(x0val_rest[-1]-x0val_rest[0]) / N
+    stress_values.append(stress_average)
+    stress_average = integrate.trapz(stress_top_left_calc, x0val_left) + pred_sing_int(delta, C_n)
+    stress_values_2.append(stress_average)
+# stress_top_left_test = []
+# for i in range(len(x0val_left)):
+#     stress_top_left_test.append(sig(x0val_left[i], 1.0)[3])
+
+
+values = np.asarray([delta_values, stress_values])
+np.savetxt("Results/DeltavsAvgStressCase1.csv", values.T, delimiter='\t')
+
+values = np.asarray([delta_values, stress_values_2])
+np.savetxt("Results/DeltavsIntStressCase1.csv", values.T, delimiter='\t')
 
 
 
 
-stress_top_left = []
-for i in range(len(x0val_left)):
-    stress_top_left.append(sig(x0val_left[i], 1.0)[3])
 
-# We compute the min and max values of the absolute value of the stress, to avoid falling into confusing positive/negative traps
 
-max_val = np.max(np.abs(stress_top_left))
-max_indx = np.argmax(np.abs(stress_top_left))
-pred_sing = 12*(0.1-x0val_left[range(len(x0val_left)-1)])**(-1/2)
-dx = (0.1-0)/(len(x0val_left))
-pref = max_val/pred_sing[max_indx]
 
-del(stress_top_left[max_indx-1:])
-
-for i in range(max_indx,len(x0val_right)-1):
-    stress_top_left.append(pref*(-1)*pred_sing[i])
-
-stress_average = (np.sum(stress_top_left)*dx)/area0
-print("Average stress is ", stress_average)
-flux = dot(u, n) * dot(u, n) * ds(1)
+#flux = dot(u, n) * dot(u, n) * ds(1)

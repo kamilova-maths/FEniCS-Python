@@ -4,10 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Define mesh and geometry
-mesh = RectangleMesh(Point(0, 0), Point(0.2, 1), 60, 60)
-
-#domain = Polygon([Point(1, 0), Point(1, a), Point(0.5, 1), Point(0, 1), Point(0, 0)])
-#mesh = generate_mesh(domain, 50)
+#mesh = Mesh('Meshes/CoupledRefinedMeshGamma5Cartesian.xml')
+mesh = Mesh('Meshes/CoupledRefinedMeshQTwiceGamma5Cyl.xml')
 
 # Create mesh
 n = FacetNormal(mesh)
@@ -25,20 +23,20 @@ w = Function(W)
 # Define the viscosity and bcs
 Gamma = Constant(5.0)
 Pe = Constant(27.0)
-#Bi = Constant(58.0)
 Bi = Constant(11.6)
-#Bi = Constant(100.0)
-#Bi = Constant(0.0)
 #Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2+x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=0.5, x1=0.3, x2=0.1)
-#Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=2.3710,
-             #    x1=0.3, x2=0.1)
+Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=2.3710,
+                x1=0.3, x2=0.1)
+
 # # distance of 0.4
-#Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=1.3601, x1=0.5,
- #                 x2=0.1)
+# Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=1.3601, x1=0.5,
+#                  x2=0.1)
 # # distance of 0.1
-Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=4.2750, x1=0.2,
-                  x2=0.1)
+# Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=4.2750, x1=0.2,
+#                   x2=0.1)
 Ta = Expression("1-x[1]", degree=1)
+Qc2.Qfun = 2.3710*1.5
+Qval = "Qfun1p5"
 
 mu = exp(-Gamma * T)
 u_in = Constant(-4.0) # uin = 4.0 is the value at which the feed in rate is balanced with the electrode consumption.
@@ -115,119 +113,36 @@ F = a1 + a2 + a3 + b5
 #   - (1 / Pe) * (-Bi * q2 * T * ds(2) + q2 * Bi * Ta * ds(2)) \
 #   - dot(dot(epsilon, v), n) * ds(0) + dot(dot(p * I, v), n) * ds(0) - dot(dot(epsilon, v), n) * ds(2) \
 #     + dot(dot(p * I, v), n) * ds(2) - dot(dot(epsilon, v), n) * ds(3) + dot(dot(p * I, v), n) * ds(3)
-
+Q_values = np.linspace(2.3710, 2*2.3710, 20)
 # Analytic continuation for viscosity - temperature dependence
-for Gamma_val in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]:
+#Gamma_values = np.concatenate(([1, 5, 10, 16], np.linspace(16.1, 20, 10), np.linspace(20.5, 23, 10)))
+Gamma_values = np.linspace(1, 23, 50)
+for Gamma_val in Gamma_values:
     Gamma.assign(Gamma_val)
     print('Gamma =', Gamma_val)
+
     solve(F == 0, w, bcs)
     # Extract solution
     (u, p, T) = w.split()
+
+    # if Gamma_val == 23:
+    #     for Q_val in Q_values:
+    #         Qc2.Qfun = Q_val
+    #         print('Q_val =', Q_val)
+    #         solve(F == 0, w, bcs)
+    #         # Extract solution
+    #         (u, p, T) = w.split()
+
 
 flux = dot(u, n) * dot(u, n) * x[0] * ds(1)
 total_flux_new = assemble(flux)
 print("Total flux on ds1 is", total_flux_new)
 
 # Plot solutions
-File("Results/velocityCylQp1.pvd") << u
-File("Results/TemperatureCylQp1.pvd") << T
-File("Results/PressureCylQp1.pvd") << p
+File("Results/velocityCyl" + Qval + ".pvd") << u
+File("Results/TemperatureCyl" + Qval + ".pvd") << T
+File("Results/PressureCyl" + Qval + ".pvd") << p
 W2 = FunctionSpace(mesh, Q2)
 Pmu = project(mu, W2)
 
-File("Results/ViscosityCylQp1.pvd") << Pmu
-
-c = plot(p, title='pressure')
-plt.colorbar(c)
-plt.show()
-#
-# c = plot(u, title='velocity')
-# plt.colorbar(c)
-# plt.show()
-#
-# c = plot(T, title='Temperature')
-# plt.colorbar(c)
-# plt.show()
-#
-# W2 = FunctionSpace(mesh, Q2)
-# pQc2 = project(Qc2, W2)
-# c = plot(pQc2)
-# plt.colorbar(c)
-# plt.show()
-#
-
-#
-# solve(F == 0, w, bcs)
-# (u, p, T) = w.split()
-# flux = dot(u, n) * dot(u, n) * x[0] * ds(1)
-# total_flux_new = assemble(flux)
-# print("Total flux on ds1 is", total_flux_new)
-#
-# # Plot solutions
-# File("Results/velocityCylQp4.pvd") << u
-# File("Results/TemperatureCylQp4.pvd") << T
-# File("Results/PressureCylQp4.pvd") << p
-# W2 = FunctionSpace(mesh, Q2)
-# Pmu = project(mu, W2)
-#
-# File("Results/ViscosityCylQp4.pvd") << Pmu
-#
-# # c = plot(p, title='pressure')
-# # plt.colorbar(c)
-# # plt.show()
-# #
-# # c = plot(u, title='velocity')
-# # plt.colorbar(c)
-# # plt.show()
-# #
-# # c = plot(T, title='Temperature')
-# # plt.colorbar(c)
-# # plt.show()
-#
-# W2 = FunctionSpace(mesh, Q2)
-# pQc2 = project(Qc2, W2)
-# c = plot(pQc2)
-# plt.colorbar(c)
-# plt.show()
-#
-# # distance of 0.1
-# Qc2 = Expression("Qfun*exp ( -pow( x[1] -(( x1-x2 )/2 + x2), 2 )/( 2*pow( x1-x2,2 ) ) )", degree=1, Qfun=4.2750, x1=0.2,
-#                  x2=0.1)
-#
-# solve(F == 0, w, bcs)
-# (u, p, T) = w.split()
-# flux = dot(u, n) * dot(u, n) * x[0] * ds(1)
-# total_flux_new = assemble(flux)
-# print("Total flux on ds1 is", total_flux_new)
-#
-# # Plot solutions
-# File("Results/velocityCylQp1.pvd") << u
-# File("Results/TemperatureCylQp1.pvd") << T
-# File("Results/PressureCylQp1.pvd") << p
-# W2 = FunctionSpace(mesh, Q2)
-# Pmu = project(mu, W2)
-#
-# File("Results/ViscosityCylQp1.pvd") << Pmu
-#
-# # c = plot(p, title='pressure')
-# # plt.colorbar(c)
-# # plt.show()
-# #
-# # c = plot(u, title='velocity')
-# # plt.colorbar(c)
-# # plt.show()
-# #
-# # c = plot(T, title='Temperature')
-# # plt.colorbar(c)
-# # plt.show()
-#
-# W2 = FunctionSpace(mesh, Q2)
-# pQc2 = project(Qc2, W2)
-# c = plot(pQc2)
-# plt.colorbar(c)
-# plt.show()
-#
-#
-#
-#
-#
+File("Results/ViscosityCyl" + Qval + ".pvd") << Pmu
